@@ -699,6 +699,18 @@
     "is managed by the": "由",
     "automation and can only be deleted by deleting that automation.": "自动化管理，只能通过删除该自动化来删除。",
     "automation and can only be deleted by deleting that automation": "自动化管理，只能通过删除该自动化来删除",
+    "This page is going away soon": "此页面即将下线",
+    "This page is going away soon.": "此页面即将下线。",
+    "in the top left.": "（位于左上角）。",
+    "in the top left": "（位于左上角）",
+    "menu)": "菜单）",
+    "menu).": "菜单）。",
+    "% left": "% 剩余",
+    "% Left": "% 剩余",
+    "5h limit": "5 小时额度",
+    "5h Limit": "5 小时额度",
+    "Daily limit": "每日额度",
+    "Weekly limit": "每周额度",
     "Custom": "自定义",
     "Outside of folders file access policy": "工作区外文件访问策略",
     "Configures how the agent tries to access files outside of its working folders.": "配置智能体访问工作区文件夹外部文件时的策略。",
@@ -4190,6 +4202,42 @@
     [
       /^within it\.?$/i,
       '。'
+    ],
+    [
+      /^(\d+)\s*h\s+limit$/i,
+      (_m, h) => `${h} 小时额度`
+    ],
+    [
+      /^(\d+)\s*d\s+limit$/i,
+      (_m, d) => `${d} 天额度`
+    ],
+    [
+      /^(\d+)\s*m\s+limit$/i,
+      (_m, m) => `${m} 分钟额度`
+    ],
+    [
+      /^(\d+)\s*s\s+limit$/i,
+      (_m, s) => `${s} 秒额度`
+    ],
+    [
+      /^(\d+(?:\.\d+)?)\s*%\s*left$/i,
+      (_m, p) => `${p}% 剩余`
+    ],
+    [
+      /^%\s*left$/i,
+      '% 剩余'
+    ],
+    [
+      /^This page is going away soon\.?$/i,
+      '此页面即将下线'
+    ],
+    [
+      /^in the top left\.?$/i,
+      '（位于左上角）。'
+    ],
+    [
+      /^menu\)\.?$/i,
+      '菜单）'
     ],
     [
       /^Manage (project|workspace) (folders|resources), agent settings, and permissions\.?$/i,
