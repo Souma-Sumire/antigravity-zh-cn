@@ -688,6 +688,17 @@
     "Danger Zone": "危险区域",
     "Delete Project": "删除项目",
     "Permanently delete this project and all of its conversations.": "永久删除当前项目及其所有历史对话。",
+    "Permanently delete this workspace and all of its conversations.": "永久删除当前工作区及其所有历史对话。",
+    "This will permanently delete": "这将永久删除其中的",
+    "This will permanently delete ": "这将永久删除其中的 ",
+    "this will permanently delete": "这将永久删除其中的",
+    "within it.": "。",
+    "within it": "。",
+    "1 active conversation": "1 个活跃对话",
+    "1 archived conversation": "1 个已归档对话",
+    "is managed by the": "由",
+    "automation and can only be deleted by deleting that automation.": "自动化管理，只能通过删除该自动化来删除。",
+    "automation and can only be deleted by deleting that automation": "自动化管理，只能通过删除该自动化来删除",
     "Custom": "自定义",
     "Outside of folders file access policy": "工作区外文件访问策略",
     "Configures how the agent tries to access files outside of its working folders.": "配置智能体访问工作区文件夹外部文件时的策略。",
@@ -4148,6 +4159,39 @@
 
   const REGEX_RULES = [
     [
+      /^This will permanently delete\s+(?:(\d+)\s+active\s+conversations?\s+and\s+(\d+)\s+archived\s+conversations?|(\d+)\s+active\s+conversations?|(\d+)\s+archived\s+conversations?)\s+within it\.?$/i,
+      (_m, bothAct, bothArch, onlyAct, onlyArch) => {
+        if (bothAct && bothArch) return `这将永久删除其中的 ${bothAct} 个活跃对话以及 ${bothArch} 个已归档对话。`;
+        if (onlyAct) return `这将永久删除其中的 ${onlyAct} 个活跃对话。`;
+        if (onlyArch) return `这将永久删除其中的 ${onlyArch} 个已归档对话。`;
+        return '这将永久删除其中的对话。';
+      }
+    ],
+    [
+      /^(\d+)\s+active\s+conversations?\s+and\s+(\d+)\s+archived\s+conversations?$/i,
+      (_m, c1, c2) => `${c1} 个活跃对话以及 ${c2} 个已归档对话`
+    ],
+    [
+      /^(\d+)\s+archived\s+conversations?\s+and\s+(\d+)\s+active\s+conversations?$/i,
+      (_m, c1, c2) => `${c1} 个已归档对话以及 ${c2} 个活跃对话`
+    ],
+    [
+      /^(\d+)\s+active\s+conversations?$/i,
+      (_m, c1) => `${c1} 个活跃对话`
+    ],
+    [
+      /^(\d+)\s+archived\s+conversations?$/i,
+      (_m, c1) => `${c1} 个已归档对话`
+    ],
+    [
+      /^This will permanently delete$/i,
+      '这将永久删除其中的'
+    ],
+    [
+      /^within it\.?$/i,
+      '。'
+    ],
+    [
       /^Manage (project|workspace) (folders|resources), agent settings, and permissions\.?$/i,
       (_m, s1, s2) => `管理${SCOPE_NOUN_MAP[s1.toLowerCase()] || s1}${SCOPE_NOUN_MAP[s2.toLowerCase()] || s2}、智能体设置与权限。`
     ],
@@ -4433,6 +4477,22 @@ const notApplyMatch = normalizedKey.match(
         record.translated = translated;
         state.translatedNodes.add(node);
         node.nodeValue = translated;
+
+        if (
+          /^[。，、；！？）》]/.test(translated) &&
+          node.previousSibling &&
+          node.previousSibling.nodeType === 3 &&
+          !node.previousSibling.nodeValue.trim()
+        ) {
+          const prev = node.previousSibling;
+          let prevRecord = state.nodeMap.get(prev);
+          if (!prevRecord) {
+            prevRecord = { orig: prev.nodeValue, translated: '' };
+            state.nodeMap.set(prev, prevRecord);
+          }
+          prev.nodeValue = '';
+          state.translatedNodes.add(prev);
+        }
       } else {
         record.translated = currentVal;
       }
@@ -4631,7 +4691,7 @@ const notApplyMatch = normalizedKey.match(
   }
 
   window.__AGY_I18N__ = {
-    version: '1.1.0',
+    version: '1.2.0',
     getLanguage: () => currentLang,
     setLanguage,
     toggle: () => setLanguage(currentLang === 'zh-CN' ? 'en-US' : 'zh-CN'),
