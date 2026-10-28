@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect x="14" y="14" width="100" height="100" rx="18" fill="#23272E" stroke="#4D78CC" stroke-width="4"/>
+  <text x="50" y="72" font-family="system-ui, -apple-system, 'Microsoft YaHei', sans-serif" font-size="48" font-weight="700" fill="#E6EAF2" text-anchor="middle">中</text>
+  <rect x="68" y="68" width="36" height="28" rx="6" fill="#4D78CC"/>
+  <text x="86" y="88" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" fill="#FFFFFF" text-anchor="middle">UI</text>
+</svg>

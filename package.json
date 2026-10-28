@@ -1,0 +1,23 @@
+{
+  "name": "antigravity-zh-cn",
+  "version": "1.2.0",
+  "description": "Antigravity 2.0 简体中文汉化补丁与自动化提取工具",
+  "main": "install.js",
+  "scripts": {
+    "install-patch": "node install.js",
+    "uninstall-patch": "node uninstall.js",
+    "inject:zh": "node scripts/inject_live.js zh",
+    "inject:en": "node scripts/inject_live.js en",
+    "extract": "node scripts/extract_untranslated.js",
+    "merge": "node scripts/extract_untranslated.js --merge"
+  },
+  "keywords": [
+    "antigravity",
+    "i18n",
+    "chinese",
+    "zh-cn",
+    "localization"
+  ],
+  "author": "Souma",
+  "license": "MIT"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "zh-cn-ui",
+  "displayName": "简体中文 UI 语言包",
+  "version": "1.2.0",
+  "description": "为 Antigravity 2.0 (2.28.0+) 桌面端提供完整的简体中文界面汉化，支持实时注入、启动自动生效与自定义词条扩展。",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "检查并刷新当前 Antigravity 界面的中文汉化状态",
+    "将 Antigravity 界面语言切换为英文或恢复为中文",
+    "向 Antigravity 中文语言包中添加新的界面翻译词条"
+  ]
+}
