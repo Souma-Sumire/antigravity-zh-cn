@@ -49,6 +49,25 @@
     "Failed to fetch branch": "获取分支失败",
     "Failed to pull latest changes": "拉取最新更改失败",
     "Failed to push changes": "推送更改失败",
+    "Failed to Commit": "提交更改失败",
+    "Failed to Generate Commit Message": "生成提交信息失败",
+    "Failed to Push": "推送到远程失败",
+    "Failed to get all annotations": "获取所有标注失败",
+    "Failed to get annotations": "获取标注失败",
+    "Failed to load comments": "加载评论失败",
+    "Failed to render diagram": "渲染图表失败",
+    "Failed to render math": "渲染数学公式失败",
+    "Failed to save token to ~/.env": "保存 Token 到 ~/.env 失败",
+    "Failed to validate the saved GitHub token.": "验证保存的 GitHub Token 失败。",
+    "Render failed": "渲染失败",
+    "Determines the markup language of the output.": "指定输出内容的标记语言。",
+    "Download this site as an app to get notified when the agent needs your attention or completes a task.": "将此站点作为应用下载，以便在智能体需要您确认或完成任务时接收通知。",
+    "Get notified when the agent needs your attention or completes a task.": "在智能体需要您确认或完成任务时接收通知。",
+    "Keeps working in this folder. Nothing is copied.": "直接在此文件夹中工作，不复制任何内容。",
+    "Sent to Chief of Staff": "已发送给幕僚长",
+    "Team of subagents to do long running work": "协同执行长时间运行任务的子智能体团队",
+    "Updates to your sidebar": "侧边栏更新",
+    "Uploaded project files and in-chat attachments are stored on Google servers and mounted into your cloud sandbox so your agent can read and work with them.": "上传的项目文件与会话附件存储于 Google 服务器，并挂载到您的云端沙箱中，以便智能体读取与处理。",
     "Force push": "强制推送",
     "No changes detected": "未检测到更改",
     "Open on GitHub": "在 GitHub 上打开",
@@ -4489,6 +4508,7 @@ const notApplyMatch = normalizedKey.match(
       cls.includes('material-symbols') ||
       cls.includes('material-icons') ||
       cls.includes('codicon') ||
+      el.getAttribute('data-icon') !== null ||
       el.getAttribute('translate') === 'no'
     ) {
       return true;
