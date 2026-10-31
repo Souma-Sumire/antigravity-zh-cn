@@ -730,6 +730,7 @@
     "5h Limit": "5 小时额度",
     "Daily limit": "每日额度",
     "Weekly limit": "每周额度",
+    "For paid Pro plans, Argon quota is separate. Higher Argon quota (included as part of the larger Gemini quota bucket) is available on Ultra plans.": "对于 Pro 付费方案，Argon 额度是独立的。Ultra 方案提供更高的 Argon 额度（作为更大 Gemini 额度池的一部分）。",
     "Custom": "自定义",
     "Outside of folders file access policy": "工作区外文件访问策略",
     "Configures how the agent tries to access files outside of its working folders.": "配置智能体访问工作区文件夹外部文件时的策略。",
@@ -4347,8 +4348,18 @@
     [/^(.+?)\s*\(Experimental\)$/i, '$1 (实验性)'],
     [/^(.+?)\s*·\s*Context window$/i, '$1 · 上下文窗口'],
     [/^Open\s+(.+?)\s+panel$/i, '打开 $1 面板'],
-    [/^Manage\s+(.+?)\s+app settings\.?$/i, '管理 $1 应用设置。']
+    [/^Manage\s+(.+?)\s+app settings\.?$/i, '管理 $1 应用设置。'],
+    [
+      /^(.+?)\s+will be removed from Antigravity on ([a-zA-Z]+)\s+(\d{1,2}),\s*(\d{4})\.?$/i,
+      (_m, model, month, day, year) => `${model} 将于 ${year}年${MONTH_NAMES[month.toLowerCase()] || month}${day}日 从 Antigravity 中下线。`
+    ]
   ];
+
+  const MONTH_NAMES = {
+    january: '1月', february: '2月', march: '3月', april: '4月',
+    may: '5月', june: '6月', july: '7月', august: '8月',
+    september: '9月', october: '10月', november: '11月', december: '12月'
+  };
 
   const PERIOD_MAP = {
     'weekly': '本周',
@@ -4419,12 +4430,16 @@ const notApplyMatch = normalizedKey.match(
     }
 
     const paidPlanMatch = normalizedKey.match(
-      /^You have (?:hit|reached|exhausted|used all of) your (weekly|5-hour|five-hour|five hour|daily|monthly|hourly) limit,\s*it will (?:fully )?refresh in (.+?)\.\s*If on a supported paid plan, you can use AI credits in the interim\.?$/i
+      /^You have (?:hit|reached|exhausted|used all of) your (weekly|5-hour|five-hour|five hour|daily|monthly|hourly) limit,\s*it (?:will|refreshes|will refresh) (?:fully )?(?:refresh )?in (.+?)\.\s*If on a supported paid plan, you can use AI credits in the interim(?:\s+or\s+upgrade\s+to\s+a\s+higher\s+tier)?\.?$/i
     );
     if (paidPlanMatch) {
       const p1 = PERIOD_MAP[paidPlanMatch[1].toLowerCase()] || paidPlanMatch[1];
       const dur = translateDuration(paidPlanMatch[2]);
-      return str.replace(trimmed, `您已达到 ${p1} 额度上限，将在 ${dur} 后刷新。若使用受支持的付费订阅方案，期间可以使用 AI 点数继续调用。`);
+      const hasUpgrade = /upgrade to a higher tier/i.test(normalizedKey);
+      const tip = hasUpgrade
+        ? '若使用受支持的付费订阅方案，期间可以使用 AI 点数继续调用，或升级至更高阶方案。'
+        : '若使用受支持的付费订阅方案，期间可以使用 AI 点数继续调用。';
+      return str.replace(trimmed, `您已达到 ${p1} 额度上限，将在 ${dur} 后刷新。${tip}`);
     }
 
     const usedSomeMatch = normalizedKey.match(
