@@ -147,6 +147,10 @@
     "Could not create project": "无法创建项目",
     "Failed to start Best of N mode": "启动 Best of N 模式失败",
     "View archived in the sidebar (![filter](icon://filter_list) menu).": "在侧边栏中查看已归档内容（通过筛选菜单）。",
+    "View archived in the sidebar (Display options menu).": "在侧边栏中查看已归档内容（通过显示选项菜单）。",
+    "View archived in the sidebar (": "在侧边栏中查看已归档（",
+    " menu).": " 菜单）。",
+    "menu).": "菜单）。",
     "Failed to rename conversation": "重命名对话失败",
     "Failed to delete conversation": "删除对话失败",
     "Failed to stop conversation": "停止对话失败",
@@ -4256,8 +4260,50 @@
       '（位于左上角）。'
     ],
     [
-      /^menu\)\.?$/i,
-      '菜单）'
+      /^View archived in the sidebar\s*\(/i,
+      '在侧边栏中查看已归档（'
+    ],
+    [
+      /^\s*menu\)\.?$/i,
+      (m) => m.includes('.') ? ' 菜单）。' : ' 菜单）'
+    ],
+    [
+      /^Updated\s+(\d+)\s*secs?(?:\s*ago)?$/i,
+      '更新于 $1 秒前'
+    ],
+    [
+      /^Updated\s+(\d+)\s*mins?(?:\s*ago)?$/i,
+      '更新于 $1 分钟前'
+    ],
+    [
+      /^Updated\s+(\d+)\s*hours?(?:\s*ago)?$/i,
+      '更新于 $1 小时前'
+    ],
+    [
+      /^Updated\s+(\d+)\s*days?(?:\s*ago)?$/i,
+      '更新于 $1 天前'
+    ],
+    [
+      /^Updated\s+([a-zA-Z]+)\s+(\d{1,2}),\s*(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?)$/i,
+      (_m, month, day, time) => {
+        const mZh = MONTH_NAMES[month.toLowerCase()] || month;
+        return `更新于 ${mZh}${day}日, ${time}`;
+      }
+    ],
+    [
+      /^Updated\s+(.+)$/i,
+      '更新于 $1'
+    ],
+    [
+      /^Created\s+([a-zA-Z]+)\s+(\d{1,2}),\s*(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?)$/i,
+      (_m, month, day, time) => {
+        const mZh = MONTH_NAMES[month.toLowerCase()] || month;
+        return `创建于 ${mZh}${day}日, ${time}`;
+      }
+    ],
+    [
+      /^Created\s+(\d+.+)$/i,
+      '创建于 $1'
     ],
     [
       /^Manage (project|workspace) (folders|resources), agent settings, and permissions\.?$/i,
@@ -4358,7 +4404,9 @@
   const MONTH_NAMES = {
     january: '1月', february: '2月', march: '3月', april: '4月',
     may: '5月', june: '6月', july: '7月', august: '8月',
-    september: '9月', october: '10月', november: '11月', december: '12月'
+    september: '9月', october: '10月', november: '11月', december: '12月',
+    jan: '1月', feb: '2月', mar: '3月', apr: '4月', jun: '6月',
+    jul: '7月', aug: '8月', sep: '9月', sept: '9月', oct: '10月', nov: '11月', dec: '12月'
   };
 
   const PERIOD_MAP = {
@@ -4510,9 +4558,31 @@ const notApplyMatch = normalizedKey.match(
       el.isContentEditable ||
       el.getAttribute('contenteditable') === 'true' ||
       el.getAttribute('data-lexical-editor') === 'true' ||
-      el.hasAttribute('data-markdown-root') ||
       el.getAttribute('data-quotable') === 'true'
     ) {
+      return true;
+    }
+    const isToastOrNotification = Boolean(
+      el.closest &&
+      el.closest('[data-testid="toast-notification"], [data-notification-tag]')
+    );
+    if (isToastOrNotification) {
+      if (el.closest('pre, code, .monaco-editor, .xterm, .katex, #agy-zh-cn-toggle-bar')) {
+        return true;
+      }
+      const cls = typeof el.className === 'string' ? el.className : '';
+      if (
+        cls.includes('material-symbols') ||
+        cls.includes('material-icons') ||
+        cls.includes('codicon') ||
+        el.getAttribute('data-icon') !== null ||
+        el.getAttribute('translate') === 'no'
+      ) {
+        return true;
+      }
+      return false;
+    }
+    if (el.hasAttribute('data-markdown-root')) {
       return true;
     }
     if (el.closest && el.closest(SKIP_CLOSEST_SELECTOR)) {
