@@ -104,6 +104,16 @@ async function main() {
   console.log('4. Enabling plugin via LanguageServer RPC...');
   const rpcOk = await enablePluginViaLsRpc();
   console.log('   RPC enable status:', rpcOk);
+
+  console.log('5. Syncing historical conversation titles to Chinese...');
+  try {
+    const { syncHistoricalTitles } = require(path.join(targetPluginDir, 'scripts', 'sync_historical_titles.js'));
+    const syncRes = await syncHistoricalTitles();
+    console.log(`   Synchronized ${syncRes.count} historical conversation titles.`);
+  } catch (err) {
+    console.warn('   Historical titles sync warning:', err.message);
+  }
+  process.exit(0);
 }
 
 main().catch((err) => {
