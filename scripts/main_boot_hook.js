@@ -603,13 +603,24 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       if (type !== 'window') return;
     } catch (_) {}
 
+    const getTitleCacheInjection = () => {
+      try {
+        const cachePath = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
+        if (fs.existsSync(cachePath)) {
+          const cache = fs.readFileSync(cachePath, 'utf8');
+          return `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},);}catch(_){}\n`;
+        }
+      } catch (_) {}
+      return '';
+    };
+
     const runInjectImmediate = () => {
       if (wc.isDestroyed()) return;
       const url = wc.getURL ? wc.getURL() : '';
       if (!url || url === 'about:blank' || url.startsWith('data:') || url.startsWith('devtools://')) return;
       const code = getRuntimeScript();
       if (!code) return;
-      wc.executeJavaScript(code, true).catch(() => {});
+      wc.executeJavaScript(getTitleCacheInjection() + code, true).catch(() => {});
     };
 
     wc.on('dom-ready', runInjectImmediate);

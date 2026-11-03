@@ -86,7 +86,15 @@ async function injectOnce(action = 'apply') {
     throw new Error('Invalid port in DevToolsActivePort');
   }
 
-  const runtimeCode = fs.readFileSync(runtimeScriptPath, 'utf8');
+  let titleCacheCode = '';
+  try {
+    const cacheFile = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
+    if (fs.existsSync(cacheFile)) {
+      titleCacheCode = `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},);}catch(_){}\n`;
+    }
+  } catch (_) {}
+
+  const runtimeCode = titleCacheCode + fs.readFileSync(runtimeScriptPath, 'utf8');
   let expr = runtimeCode + '\n;window.__AGY_I18N__ && (window.__AGY_I18N__.apply(), window.__AGY_I18N__.getStats());';
   if (action === 'toggle') {
     expr = runtimeCode + '\n;window.__AGY_I18N__ && (window.__AGY_I18N__.toggle(), window.__AGY_I18N__.getStats());';

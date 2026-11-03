@@ -4704,6 +4704,16 @@
       return str.replace(trimmed, EXACT_MAP[normalizedKey]);
     }
 
+    const titleCache = window.__AGY_TITLE_CACHE__;
+    if (titleCache) {
+      if (titleCache[trimmed]) {
+        return str.replace(trimmed, titleCache[trimmed]);
+      }
+      if (titleCache[normalizedKey]) {
+        return str.replace(trimmed, titleCache[normalizedKey]);
+      }
+    }
+
     const notApplyMatch = normalizedKey.match(
       /^You have (?:hit|reached|exhausted|used all of) your (weekly|5-hour|five-hour|five hour|daily|monthly|hourly) limit,\s*(?:so\s+)?the (weekly|5-hour|five-hour|five hour|daily|monthly|hourly) limit does not currently apply\.\s*Your (?:(?:\1|weekly|5-hour|five-hour|five hour|daily|monthly|hourly)\s+)?limit will (?:fully\s+)?refresh in (.+?)\.?$/i
     );

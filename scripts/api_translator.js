@@ -5,6 +5,8 @@ const path = require('path');
 const os = require('os');
 const http = require('http');
 const https = require('https');
+const tls = require('tls');
+const { URL } = require('url');
 
 const CACHE_FILE = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
 
@@ -33,13 +35,252 @@ function formatPangu(text) {
     .trim();
 }
 
-function requestMyMemory(text, useProxy = true) {
+function getProxyConfig() {
+  const envProxy =
+    process.env.HTTPS_PROXY ||
+    process.env.https_proxy ||
+    process.env.HTTP_PROXY ||
+    process.env.http_proxy ||
+    process.env.ALL_PROXY ||
+    process.env.all_proxy;
+
+  if (envProxy) {
+    try {
+      const url = new URL(
+        envProxy.startsWith('http://') || envProxy.startsWith('https://') || envProxy.startsWith('socks5://')
+          ? envProxy
+          : `http://${envProxy}`
+      );
+      return {
+        host: url.hostname || '127.0.0.1',
+        port: parseInt(url.port, 10) || 7890
+      };
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+function requestMicrosoftTranslate(texts, proxyConfig) {
+  return new Promise((resolve, reject) => {
+    const isSingle = typeof texts === 'string';
+    const list = isSingle ? [texts] : texts;
+    const postData = JSON.stringify(list);
+    const targetHost = 'edge.microsoft.com';
+    const apiPath = '/translate/translatetext?to=zh-Hans';
+
+    const handleResponse = (res) => {
+      let body = '';
+      res.on('data', (chunk) => (body += chunk));
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(body);
+          if (Array.isArray(json)) {
+            const results = json.map((item) =>
+              item && Array.isArray(item.translations) && item.translations[0] ? item.translations[0].text : ''
+            );
+            resolve(isSingle ? results[0] : results);
+          } else {
+            reject(new Error(`Microsoft API parse error: ${body.slice(0, 100)}`));
+          }
+        } catch (e) {
+          reject(e);
+        }
+      });
+    };
+
+    if (proxyConfig && proxyConfig.host && proxyConfig.port) {
+      const connectReq = http.request({
+        host: proxyConfig.host,
+        port: proxyConfig.port,
+        method: 'CONNECT',
+        path: `${targetHost}:443`,
+        timeout: 4000
+      });
+
+      connectReq.on('connect', (res, socket) => {
+        if (res.statusCode !== 200) {
+          return reject(new Error(`Proxy CONNECT rejected: ${res.statusCode}`));
+        }
+
+        const tlsSocket = tls.connect(
+          {
+            socket,
+            servername: targetHost,
+            rejectUnauthorized: false
+          },
+          () => {
+            const req = https.request(
+              {
+                host: targetHost,
+                path: apiPath,
+                method: 'POST',
+                createConnection: () => tlsSocket,
+                headers: {
+                  Host: targetHost,
+                  'Content-Type': 'application/json',
+                  'Content-Length': Buffer.byteLength(postData),
+                  'User-Agent':
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0'
+                },
+                timeout: 5000
+              },
+              handleResponse
+            );
+
+            req.on('error', reject);
+            req.on('timeout', () => {
+              req.destroy();
+              reject(new Error('Microsoft request timeout'));
+            });
+            req.write(postData);
+            req.end();
+          }
+        );
+
+        tlsSocket.on('error', reject);
+      });
+
+      connectReq.on('error', reject);
+      connectReq.on('timeout', () => {
+        connectReq.destroy();
+        reject(new Error('Proxy connect timeout'));
+      });
+      connectReq.end();
+    } else {
+      const req = https.request(
+        {
+          host: targetHost,
+          path: apiPath,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData),
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0'
+          },
+          timeout: 5000
+        },
+        handleResponse
+      );
+
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Direct Microsoft request timeout'));
+      });
+      req.write(postData);
+      req.end();
+    }
+  });
+}
+
+function requestGoogleTranslate(text, proxyConfig) {
   return new Promise((resolve, reject) => {
     const q = encodeURIComponent(text);
-    const apiPath = `/get?q=${q}&langpair=en|zh-CN`;
-    const proxyPort = 7897;
+    const targetHost = 'clients5.google.com';
+    const apiPath = `/translate_a/t?client=dict-chrome-ex&sl=auto&tl=zh-CN&q=${q}`;
 
-    const onResponse = (res) => {
+    const handleResponse = (res) => {
+      let body = '';
+      res.on('data', (chunk) => (body += chunk));
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(body);
+          if (Array.isArray(json) && json[0] && typeof json[0][0] === 'string') {
+            resolve(json[0][0]);
+          } else {
+            reject(new Error(`Google API parse error: ${body.slice(0, 100)}`));
+          }
+        } catch (e) {
+          reject(e);
+        }
+      });
+    };
+
+    if (proxyConfig && proxyConfig.host && proxyConfig.port) {
+      const connectReq = http.request({
+        host: proxyConfig.host,
+        port: proxyConfig.port,
+        method: 'CONNECT',
+        path: `${targetHost}:443`,
+        timeout: 4000
+      });
+
+      connectReq.on('connect', (res, socket) => {
+        if (res.statusCode !== 200) {
+          return reject(new Error(`Proxy CONNECT rejected: ${res.statusCode}`));
+        }
+
+        const tlsSocket = tls.connect(
+          {
+            socket,
+            servername: targetHost,
+            rejectUnauthorized: false
+          },
+          () => {
+            const req = https.request(
+              {
+                host: targetHost,
+                path: apiPath,
+                createConnection: () => tlsSocket,
+                headers: {
+                  Host: targetHost,
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                timeout: 5000
+              },
+              handleResponse
+            );
+
+            req.on('error', reject);
+            req.on('timeout', () => {
+              req.destroy();
+              reject(new Error('Google request timeout'));
+            });
+            req.end();
+          }
+        );
+
+        tlsSocket.on('error', reject);
+      });
+
+      connectReq.on('error', reject);
+      connectReq.on('timeout', () => {
+        connectReq.destroy();
+        reject(new Error('Proxy connect timeout'));
+      });
+      connectReq.end();
+    } else {
+      const req = https.request(
+        {
+          host: targetHost,
+          path: apiPath,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          timeout: 5000
+        },
+        handleResponse
+      );
+
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Direct Google request timeout'));
+      });
+      req.end();
+    }
+  });
+}
+
+function requestMyMemory(text, proxyConfig) {
+  return new Promise((resolve, reject) => {
+    const q = encodeURIComponent(text);
+    const targetHost = 'api.mymemory.translated.net';
+    const apiPath = `/get?q=${q}&langpair=en|zh-CN`;
+
+    const handleResponse = (res) => {
       let body = '';
       res.on('data', (chunk) => (body += chunk));
       res.on('end', () => {
@@ -48,7 +289,7 @@ function requestMyMemory(text, useProxy = true) {
           if (json && json.responseData && json.responseData.translatedText) {
             resolve(json.responseData.translatedText);
           } else {
-            reject(new Error(`API Error: ${body.slice(0, 100)}`));
+            reject(new Error(`MyMemory API error: ${body.slice(0, 100)}`));
           }
         } catch (e) {
           reject(e);
@@ -56,66 +297,78 @@ function requestMyMemory(text, useProxy = true) {
       });
     };
 
-    if (useProxy) {
-      const connectReq = http.request(
-        {
-          host: '127.0.0.1',
-          port: proxyPort,
-          method: 'CONNECT',
-          path: 'api.mymemory.translated.net:443',
-          timeout: 4500
-        },
-        () => {}
-      );
+    if (proxyConfig && proxyConfig.host && proxyConfig.port) {
+      const connectReq = http.request({
+        host: proxyConfig.host,
+        port: proxyConfig.port,
+        method: 'CONNECT',
+        path: `${targetHost}:443`,
+        timeout: 4000
+      });
 
       connectReq.on('connect', (res, socket) => {
         if (res.statusCode !== 200) {
           return reject(new Error(`Proxy CONNECT rejected: ${res.statusCode}`));
         }
-        const tlsReq = https.request(
+
+        const tlsSocket = tls.connect(
           {
-            host: 'api.mymemory.translated.net',
             socket,
-            path: apiPath,
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            timeout: 5000
+            servername: targetHost,
+            rejectUnauthorized: false
           },
-          onResponse
+          () => {
+            const req = https.request(
+              {
+                host: targetHost,
+                path: apiPath,
+                createConnection: () => tlsSocket,
+                headers: {
+                  Host: targetHost,
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                timeout: 5000
+              },
+              handleResponse
+            );
+
+            req.on('error', reject);
+            req.on('timeout', () => {
+              req.destroy();
+              reject(new Error('MyMemory request timeout'));
+            });
+            req.end();
+          }
         );
-        tlsReq.on('error', reject);
-        tlsReq.on('timeout', () => {
-          tlsReq.destroy();
-          reject(new Error('TLS request timeout'));
-        });
-        tlsReq.end();
+
+        tlsSocket.on('error', reject);
       });
 
       connectReq.on('error', reject);
       connectReq.on('timeout', () => {
         connectReq.destroy();
-        reject(new Error('Proxy connection timeout'));
+        reject(new Error('Proxy connect timeout'));
       });
       connectReq.end();
     } else {
-      const directReq = https.request(
+      const req = https.request(
         {
-          host: 'api.mymemory.translated.net',
+          host: targetHost,
           path: apiPath,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           },
           timeout: 5000
         },
-        onResponse
+        handleResponse
       );
-      directReq.on('error', reject);
-      directReq.on('timeout', () => {
-        directReq.destroy();
-        reject(new Error('Direct request timeout'));
+
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Direct MyMemory timeout'));
       });
-      directReq.end();
+      req.end();
     }
   });
 }
@@ -124,7 +377,8 @@ const PROTECTED_TERMS = [
   [/GitHub\s*Actions?/gi, 'GitHub Actions'],
   [/Readme/gi, 'README'],
   [/FFXIV/gi, 'FFXIV'],
-  [/UI\/UX/gi, 'UI/UX']
+  [/UI\/UX/gi, 'UI/UX'],
+  [/Antigravity/gi, 'Antigravity']
 ];
 
 function applyTermProtection(text) {
@@ -142,28 +396,57 @@ async function translateWithApi(text) {
   const raw = text.trim();
   if (!raw) return raw;
 
-  // 检查缓存
   if (memoryCache[raw]) {
     return memoryCache[raw];
   }
 
-  // 合并并发重复请求
   if (inFlight.has(raw)) {
     return inFlight.get(raw);
   }
 
   const task = (async () => {
     try {
-      // 优先尝试代理访问，若代理不可用则自动直连重试
+      const proxy = getProxyConfig();
       let trans = '';
+
+      // 1. 优先尝试微软 Edge 官方翻译接口（直连或走代理均可）
       try {
-        trans = await requestMyMemory(raw, true);
+        trans = await requestMicrosoftTranslate(raw, null);
       } catch (_) {
-        trans = await requestMyMemory(raw, false);
+        if (proxy) {
+          try {
+            trans = await requestMicrosoftTranslate(raw, proxy);
+          } catch (_) {}
+        }
+      }
+
+      // 2. 若微软翻译未成功，降级尝试 Google 官方专用翻译接口
+      if (!trans || trans === raw) {
+        try {
+          trans = await requestGoogleTranslate(raw, proxy);
+        } catch (_) {
+          if (proxy) {
+            try {
+              trans = await requestGoogleTranslate(raw, null);
+            } catch (_) {}
+          }
+        }
+      }
+
+      // 3. 若均未成功，降级至 MyMemory
+      if (!trans || trans === raw) {
+        try {
+          trans = await requestMyMemory(raw, proxy);
+        } catch (_) {
+          if (proxy) {
+            try {
+              trans = await requestMyMemory(raw, null);
+            } catch (_) {}
+          }
+        }
       }
 
       if (trans && trans !== raw) {
-        // 去除尾部句号等无意义标点、应用技术专有名词保护并整理盘古之白
         trans = trans.replace(/[。，.]$/, '').trim();
         trans = applyTermProtection(trans);
         trans = formatPangu(trans);
@@ -172,7 +455,7 @@ async function translateWithApi(text) {
         return trans;
       }
       return raw;
-    } catch (e) {
+    } catch (_) {
       return raw;
     } finally {
       inFlight.delete(raw);
@@ -208,64 +491,36 @@ async function translateBatchWithApi(texts) {
 
   if (toFetch.length === 0) return resultMap;
 
-  const chunks = [];
-  let currentChunk = [];
-  let currentChars = 0;
-
-  for (const item of toFetch) {
-    if (currentChunk.length >= 10 || (currentChars + item.length > 500 && currentChunk.length > 0)) {
-      chunks.push(currentChunk);
-      currentChunk = [];
-      currentChars = 0;
-    }
-    currentChunk.push(item);
-    currentChars += item.length;
-  }
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
-  }
-
-  await Promise.all(
-    chunks.map(async (chunk) => {
-      if (chunk.length === 1) {
-        const trans = await translateWithApi(chunk[0]);
-        resultMap[chunk[0]] = trans;
-        return;
-      }
-
-      try {
-        const combined = chunk.join('\n');
-        let translatedRaw = '';
-        try {
-          translatedRaw = await requestMyMemory(combined, true);
-        } catch (_) {
-          translatedRaw = await requestMyMemory(combined, false);
-        }
-
-        const lines = (translatedRaw || '').split('\n').map((l) => l.trim());
-
-        if (lines.length === chunk.length) {
-          chunk.forEach((orig, idx) => {
-            let line = lines[idx].replace(/[。，.]$/, '').trim();
+  // 优先尝试微软批量直连翻译（每次最多 10 条）
+  const batchSize = 10;
+  for (let i = 0; i < toFetch.length; i += batchSize) {
+    const chunk = toFetch.slice(i, i + batchSize);
+    let msSuccess = false;
+    try {
+      const msResults = await requestMicrosoftTranslate(chunk, null);
+      if (Array.isArray(msResults) && msResults.length === chunk.length) {
+        chunk.forEach((orig, idx) => {
+          let line = (msResults[idx] || '').replace(/[。，.]$/, '').trim();
+          if (line && line !== orig) {
             line = applyTermProtection(line);
             line = formatPangu(line);
             memoryCache[orig] = line;
             resultMap[orig] = line;
-          });
-        } else {
-          const fallbacks = await Promise.all(chunk.map((item) => translateWithApi(item)));
-          chunk.forEach((orig, idx) => {
-            resultMap[orig] = fallbacks[idx];
-          });
-        }
-      } catch (_) {
-        const fallbacks = await Promise.all(chunk.map((item) => translateWithApi(item)));
-        chunk.forEach((orig, idx) => {
-          resultMap[orig] = fallbacks[idx];
+          }
         });
+        msSuccess = true;
       }
-    })
-  );
+    } catch (_) {}
+
+    if (!msSuccess) {
+      await Promise.all(
+        chunk.map(async (item) => {
+          const trans = await translateWithApi(item);
+          resultMap[item] = trans;
+        })
+      );
+    }
+  }
 
   saveCache();
   return resultMap;
@@ -276,5 +531,8 @@ module.exports = {
   translateBatchWithApi,
   getCachedTranslation,
   getCacheMap: () => memoryCache,
-  formatPangu
+  formatPangu,
+  getProxyConfig,
+  requestMicrosoftTranslate,
+  requestGoogleTranslate
 };
