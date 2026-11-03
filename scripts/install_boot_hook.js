@@ -93,6 +93,22 @@ function isAsarPatched(targetAsarPath = asarPath) {
 }
 
 function writeAsarSafely(targetPath, finalBuf) {
+  const tmpPath = `${targetPath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, finalBuf);
+    fs.renameSync(tmpPath, targetPath);
+    try {
+      const stat = fs.statSync(targetPath);
+      if (stat.size === finalBuf.length) {
+        return 'atomic-rename';
+      }
+    } catch (_) {}
+  } catch (_) {
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch (_) {}
+  }
+
   try {
     const fd = fs.openSync(targetPath, 'r+');
     try {
@@ -101,7 +117,10 @@ function writeAsarSafely(targetPath, finalBuf) {
     } finally {
       fs.closeSync(fd);
     }
-    return 'in-place';
+    const stat = fs.statSync(targetPath);
+    if (stat.size === finalBuf.length) {
+      return 'in-place-verified';
+    }
   } catch (_) {}
 
   try {
@@ -157,15 +176,74 @@ function writeAsarSafely(targetPath, finalBuf) {
 
 function uninstall() {
   if (fs.existsSync(appDir)) {
+    const markerFile = path.join(appDir, '__agy_zh_cn_hook__');
+    if (fs.existsSync(markerFile)) {
+      try {
+        fs.rmSync(appDir, { recursive: true, force: true });
+      } catch (_) {}
+    }
+  }
+
+  if (!fs.existsSync(asarPath)) {
+    console.log('app.asar not found, skip restore.');
+    return;
+  }
+
+  const isPatched = isAsarPatched(asarPath);
+  if (!isPatched) {
+    console.log('app.asar is currently not patched.');
+    if (fs.existsSync(asarBakPath)) {
+      try { fs.unlinkSync(asarBakPath); } catch (_) {}
+    }
+    return;
+  }
+
+  let restored = false;
+  if (fs.existsSync(asarBakPath)) {
     try {
-      fs.rmSync(appDir, { recursive: true, force: true });
+      const bakBuf = fs.readFileSync(asarBakPath);
+      if (!isAsarPatched(asarBakPath)) {
+        writeAsarSafely(asarPath, bakBuf);
+        console.log('Restored original app.asar from verified backup:', asarBakPath);
+        restored = true;
+      }
     } catch (_) {}
   }
+
+  if (!restored) {
+    try {
+      const currentBuf = fs.readFileSync(asarPath);
+      const { dataOffset, header } = parseAsar(currentBuf);
+      const mainEntry = header.files.dist.files['main.js'];
+      const mainStart = dataOffset + Number(mainEntry.offset);
+      const currentMainCode = currentBuf.toString('utf8', mainStart, mainStart + mainEntry.size);
+
+      const cleanMainCode = currentMainCode.includes('\n')
+        ? currentMainCode.slice(currentMainCode.indexOf('\n') + 1)
+        : currentMainCode.replace(HOOK_MARKER, '');
+      const cleanMainBuf = Buffer.from(cleanMainCode, 'utf8');
+
+      const basePayloadLen = Number(mainEntry.offset);
+      const payloadBuf = currentBuf.subarray(dataOffset, dataOffset + basePayloadLen);
+
+      mainEntry.size = cleanMainBuf.length;
+      mainEntry.offset = String(payloadBuf.length);
+      mainEntry.integrity = computeIntegrity(cleanMainBuf);
+
+      const newHeaderJson = JSON.stringify(header);
+      const newHeaderBuf = buildAsarHeaderBuffer(newHeaderJson);
+      const restoredBuf = Buffer.concat([newHeaderBuf, payloadBuf, cleanMainBuf]);
+
+      writeAsarSafely(asarPath, restoredBuf);
+      console.log('Dynamically unhooked and restored clean app.asar.');
+      restored = true;
+    } catch (err) {
+      console.error('Failed to dynamically restore app.asar:', err.message);
+    }
+  }
+
   if (fs.existsSync(asarBakPath)) {
-    writeAsarSafely(asarPath, fs.readFileSync(asarBakPath));
-    console.log('Restored original app.asar from backup:', asarBakPath);
-  } else {
-    console.log('No app.asar.bak found at:', asarBakPath);
+    try { fs.unlinkSync(asarBakPath); } catch (_) {}
   }
 }
 
@@ -176,9 +254,14 @@ function install(force = false) {
   }
 
   if (fs.existsSync(appDir)) {
-    try {
-      fs.rmSync(appDir, { recursive: true, force: true });
-    } catch (_) {}
+    const markerFile = path.join(appDir, '__agy_zh_cn_hook__');
+    if (fs.existsSync(markerFile)) {
+      try {
+        fs.rmSync(appDir, { recursive: true, force: true });
+      } catch (_) {}
+    } else {
+      console.warn('Notice: resources/app directory exists.');
+    }
   }
 
   const fallbackHookPath = path.join(__dirname, 'main_boot_hook.js');

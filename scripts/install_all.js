@@ -83,16 +83,7 @@ async function main() {
     console.log('1. Using plugin in place at:', targetPluginDir);
   }
 
-  console.log('2. Injecting live Chinese UI into running Antigravity window...');
-  try {
-    execFileSync(process.execPath, [path.join(targetPluginDir, 'scripts', 'inject_live.js'), 'zh'], {
-      stdio: 'inherit'
-    });
-  } catch (err) {
-    console.warn('   Live injection warning:', err.message);
-  }
-
-  console.log('3. Installing persistent Electron boot hook into app.asar...');
+  console.log('2. Installing persistent Electron boot hook into app.asar...');
   try {
     execFileSync(process.execPath, [path.join(targetPluginDir, 'scripts', 'install_boot_hook.js'), '--force'], {
       stdio: 'inherit'
@@ -101,11 +92,11 @@ async function main() {
     console.warn('   Boot hook warning:', err.message);
   }
 
-  console.log('4. Enabling plugin via LanguageServer RPC...');
+  console.log('3. Enabling plugin via LanguageServer RPC...');
   const rpcOk = await enablePluginViaLsRpc();
   console.log('   RPC enable status:', rpcOk);
 
-  console.log('5. Syncing historical conversation titles to Chinese...');
+  console.log('4. Syncing historical conversation titles to Chinese...');
   try {
     const { syncHistoricalTitles } = require(path.join(targetPluginDir, 'scripts', 'sync_historical_titles.js'));
     const syncRes = await syncHistoricalTitles();
@@ -113,6 +104,16 @@ async function main() {
   } catch (err) {
     console.warn('   Historical titles sync warning:', err.message);
   }
+
+  console.log('5. Injecting live Chinese UI into running Antigravity window...');
+  try {
+    execFileSync(process.execPath, [path.join(targetPluginDir, 'scripts', 'inject_live.js'), 'zh'], {
+      stdio: 'inherit'
+    });
+  } catch (err) {
+    console.warn('   Live injection warning:', err.message);
+  }
+
   process.exit(0);
 }
 

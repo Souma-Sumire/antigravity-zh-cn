@@ -74,7 +74,7 @@ antigravity-zh-cn/
 
 1. **常驻注入**：
    - `install_boot_hook.js` 会在 `resources/app.asar` 头部微打补丁引入 `main_boot_hook.js`。
-   - `main_boot_hook.js` 拦截 Electron 的 `Menu.setApplicationMenu` 及窗口创建的 `webPreferences.preload`，使每次启动时窗口天然加载汉化。
+   - `main_boot_hook.js` 拦截 Electron 的原生应用菜单（`Menu.setApplicationMenu`）并监听 `app.on("web-contents-created")` 页面生命周期事件，通过 `executeJavaScript` 自动注入汉化脚本。
 2. **热修复与自愈**：
    - 遇到 Antigravity 自动更新覆盖 `app.asar` 时，插件配套的 `session_hook.js` 在 Agent 会话启动时自动检测补丁状态并实现静默自愈与热重载。
 

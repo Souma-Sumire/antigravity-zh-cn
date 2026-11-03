@@ -4689,28 +4689,24 @@
     const trimmed = str.trim();
     if (!trimmed) return null;
 
-    if (trimmed === 'when working') {
-      return '（';
-    }
-
     if (customDict[trimmed]) {
-      return str.replace(trimmed, customDict[trimmed]);
+      return str.replace(trimmed, () => customDict[trimmed]);
     }
     if (EXACT_MAP[trimmed]) {
-      return str.replace(trimmed, EXACT_MAP[trimmed]);
+      return str.replace(trimmed, () => EXACT_MAP[trimmed]);
     }
     const normalizedKey = trimmed.replace(/\s+/g, ' ');
     if (EXACT_MAP[normalizedKey]) {
-      return str.replace(trimmed, EXACT_MAP[normalizedKey]);
+      return str.replace(trimmed, () => EXACT_MAP[normalizedKey]);
     }
 
     const titleCache = window.__AGY_TITLE_CACHE__;
     if (titleCache) {
       if (titleCache[trimmed]) {
-        return str.replace(trimmed, titleCache[trimmed]);
+        return str.replace(trimmed, () => titleCache[trimmed]);
       }
       if (titleCache[normalizedKey]) {
-        return str.replace(trimmed, titleCache[normalizedKey]);
+        return str.replace(trimmed, () => titleCache[normalizedKey]);
       }
     }
 
@@ -5238,6 +5234,23 @@
     if (currentLang === 'zh-CN') {
       walkAndTranslate(document.body);
     }
+
+  function cleanupRemovedNode(node) {
+    if (!node) return;
+    if (state.translatedNodes) state.translatedNodes.delete(node);
+    if (state.translatedAttrElements) state.translatedAttrElements.delete(node);
+    if (node.nodeType === 1 && typeof document !== 'undefined' && typeof document.createTreeWalker === 'function') {
+      try {
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+        let curr = walker.nextNode();
+        while (curr) {
+          if (state.translatedNodes) state.translatedNodes.delete(curr);
+          if (state.translatedAttrElements) state.translatedAttrElements.delete(curr);
+          curr = walker.nextNode();
+        }
+      } catch (_) {}
+    }
+  }
 
     const observer = new MutationObserver((mutations) => {
       if (currentLang !== 'zh-CN') return;

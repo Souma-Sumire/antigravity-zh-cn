@@ -1,10 +1,12 @@
 {
   "name": "antigravity-zh-cn",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Antigravity 2.0 简体中文汉化补丁与自动化提取工具",
   "main": "install.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
-    "postinstall": "node install.js",
     "install-patch": "node install.js",
     "uninstall-patch": "node uninstall.js",
     "inject:zh": "node scripts/inject_live.js zh",

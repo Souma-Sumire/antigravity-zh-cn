@@ -259,18 +259,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
 
   function translateMenuItemOrTemplate(item, translateTopLevel) {
     if (!item || typeof item !== 'object') return item;
-    const copy = {};
-    if (item.id !== undefined) copy.id = item.id;
-    if (item.label !== undefined) copy.label = item.label;
-    if (item.role !== undefined) copy.role = item.role;
-    if (item.type !== undefined) copy.type = item.type;
-    if (item.accelerator !== undefined) copy.accelerator = item.accelerator;
-    if (item.icon !== undefined) copy.icon = item.icon;
-    if (item.sublabel !== undefined) copy.sublabel = item.sublabel;
-    if (item.toolTip !== undefined) copy.toolTip = item.toolTip;
-    if (typeof item.enabled === 'boolean') copy.enabled = item.enabled;
-    if (typeof item.visible === 'boolean') copy.visible = item.visible;
-    if (typeof item.checked === 'boolean') copy.checked = item.checked;
+    const copy = Object.assign({}, item);
 
     const origLabel = copy.label;
     if (typeof item.click === 'function') {
@@ -499,7 +488,19 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   // 注册主进程翻译 API 桥接
   if (electron.ipcMain && !electron.ipcMain.__agyTitleApiBridgeRegistered) {
     electron.ipcMain.__agyTitleApiBridgeRegistered = true;
-    electron.ipcMain.handle('agy-translate-title', async (_event, text) => {
+    const callTimes = [];
+    electron.ipcMain.handle('agy-translate-title', async (event, text) => {
+      const senderUrl = event?.senderFrame?.url || '';
+      const isInternal =
+        senderUrl.startsWith('file://') ||
+        senderUrl.startsWith('vscode-file://') ||
+        senderUrl.startsWith('vscode-webview://');
+      if (!isInternal) return text;
+      if (typeof text !== 'string' || !text.trim() || text.length > 500) return text;
+      const now = Date.now();
+      while (callTimes.length > 0 && now - callTimes[0] > 10000) callTimes.shift();
+      if (callTimes.length >= 30) return text;
+      callTimes.push(now);
       try {
         const translatorPath = path.join(pluginScriptsDir, 'api_translator.js');
         if (fs.existsSync(translatorPath)) {
@@ -608,7 +609,8 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         const cachePath = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
         if (fs.existsSync(cachePath)) {
           const cache = fs.readFileSync(cachePath, 'utf8');
-          return `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},);}catch(_){}\n`;
+          const safeJson = JSON.stringify(JSON.parse(cache));
+          return `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${safeJson});}catch(_){}\n`;
         }
       } catch (_) {}
       return '';

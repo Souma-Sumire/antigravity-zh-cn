@@ -5,6 +5,10 @@ const path = require('path');
 const os = require('os');
 const { translateBatchWithApi } = require('./api_translator');
 
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function getSqliteModule() {
   try {
     return require('node:sqlite');
@@ -142,17 +146,19 @@ async function syncHistoricalTitles() {
         for (const row of pendingFtsRows) {
           const trans = transMap[row.title];
           if (trans && trans !== row.title) {
-            updateFtsStmt.run(trans, row.conversation_id);
-            const key = `${row.conversation_id}:${row.title}`;
-            if (!recorded.has(key)) {
-              recorded.add(key);
-              updatedItems.push({
-                type: 'fts',
-                id: row.conversation_id,
-                original: row.title,
-                translated: trans
-              });
-            }
+            try {
+              updateFtsStmt.run(trans, row.conversation_id);
+              const key = `${row.conversation_id}:${row.title}`;
+              if (!recorded.has(key)) {
+                recorded.add(key);
+                updatedItems.push({
+                  type: 'fts',
+                  id: row.conversation_id,
+                  original: row.title,
+                  translated: trans
+                });
+              }
+            } catch (_) {}
           }
         }
       }
@@ -174,19 +180,35 @@ async function syncHistoricalTitles() {
         fs.writeFileSync(bakPath, content, 'utf8');
       }
 
-      const newContent = content.replace(`title:"${originalTitle}"`, `title:"${translatedTitle}"`);
-      fs.writeFileSync(fullPath, newContent, 'utf8');
-
-      const key = `${file}:${originalTitle}`;
-      if (!recorded.has(key)) {
-        recorded.add(key);
-        updatedItems.push({
-          type: 'pbtxt',
-          file,
-          original: originalTitle,
-          translated: translatedTitle
-        });
+      const titleRegex = new RegExp(`title:\\s*"${escapeRegExp(originalTitle)}"`);
+      if (titleRegex.test(content)) {
+        const newContent = content.replace(titleRegex, () => `title: "${translatedTitle}"`);
+        if (newContent !== content) {
+          fs.writeFileSync(fullPath, newContent, 'utf8');
+          const key = `${file}:${originalTitle}`;
+          if (!recorded.has(key)) {
+            recorded.add(key);
+            updatedItems.push({
+              type: 'pbtxt',
+              file,
+              original: originalTitle,
+              translated: translatedTitle
+            });
+          }
+        }
       }
+    } catch (_) {}
+  }
+
+  if (updatedItems.length > 0) {
+    try {
+      const manifestPath = path.join(root, 'historical_titles_backup.json');
+      let manifest = [];
+      if (fs.existsSync(manifestPath)) {
+        manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      }
+      manifest.push(...updatedItems);
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
     } catch (_) {}
   }
 

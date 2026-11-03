@@ -14,13 +14,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const zlib = require('zlib');
 
 // 默认路径配置
 const DEFAULT_INSTALL_DIR = path.join(
-  process.env.LOCALAPPDATA || 'C:\\Users\\55346\\AppData\\Local',
+  process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
   'Programs',
-  'Antigravity'
+  'antigravity'
 );
 
 const RUNTIME_PATH = path.join(__dirname, 'zh_cn_runtime.js');

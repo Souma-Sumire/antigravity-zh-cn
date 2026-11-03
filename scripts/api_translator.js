@@ -51,7 +51,11 @@ function getProxyConfig() {
           ? envProxy
           : `http://${envProxy}`
       );
+      if (url.protocol === 'socks5:') {
+        return null;
+      }
       return {
+        protocol: url.protocol,
         host: url.hostname || '127.0.0.1',
         port: parseInt(url.port, 10) || 7890
       };
@@ -107,7 +111,7 @@ function requestMicrosoftTranslate(texts, proxyConfig) {
           {
             socket,
             servername: targetHost,
-            rejectUnauthorized: false
+            rejectUnauthorized: true
           },
           () => {
             const req = https.request(
@@ -216,7 +220,7 @@ function requestGoogleTranslate(text, proxyConfig) {
           {
             socket,
             servername: targetHost,
-            rejectUnauthorized: false
+            rejectUnauthorized: true
           },
           () => {
             const req = https.request(
@@ -315,7 +319,7 @@ function requestMyMemory(text, proxyConfig) {
           {
             socket,
             servername: targetHost,
-            rejectUnauthorized: false
+            rejectUnauthorized: true
           },
           () => {
             const req = https.request(
@@ -395,6 +399,9 @@ async function translateWithApi(text) {
   if (!text || typeof text !== 'string') return text;
   const raw = text.trim();
   if (!raw) return raw;
+  if (process.env.AGY_DISABLE_REMOTE_TRANSLATE === '1' || process.env.AGY_OFFLINE === '1') {
+    return raw;
+  }
 
   if (memoryCache[raw]) {
     return memoryCache[raw];
@@ -474,6 +481,11 @@ function getCachedTranslation(text) {
 
 async function translateBatchWithApi(texts) {
   if (!Array.isArray(texts) || texts.length === 0) return {};
+  if (process.env.AGY_DISABLE_REMOTE_TRANSLATE === '1' || process.env.AGY_OFFLINE === '1') {
+    const directMap = {};
+    for (const t of texts) directMap[t] = t;
+    return directMap;
+  }
 
   const resultMap = {};
   const toFetch = [];

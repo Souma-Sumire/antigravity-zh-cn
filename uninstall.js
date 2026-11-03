@@ -19,7 +19,50 @@ try {
 } catch (_) {}
 
 try {
-  console.log('3. Removing plugin directory:', targetPluginDir);
+  console.log('3. Restoring historical conversation titles and annotations backup...');
+  const antigravityRoot = path.join(os.homedir(), '.gemini', 'antigravity');
+
+  // 恢复 SQLite 数据库备份
+  const dbPath = path.join(antigravityRoot, 'conversation_summaries.db');
+  const dbBakPath = path.join(antigravityRoot, 'conversation_summaries.db.bak');
+  if (fs.existsSync(dbBakPath)) {
+    try {
+      fs.copyFileSync(dbBakPath, dbPath);
+      fs.unlinkSync(dbBakPath);
+      console.log('Restored conversation_summaries.db from backup.');
+    } catch (_) {}
+  }
+
+  // 恢复 annotations/*.pbtxt 备份
+  const annotationsDir = path.join(antigravityRoot, 'annotations');
+  if (fs.existsSync(annotationsDir)) {
+    try {
+      const files = fs.readdirSync(annotationsDir);
+      for (const file of files) {
+        if (file.endsWith('.pbtxt.bak')) {
+          const bakFile = path.join(annotationsDir, file);
+          const targetPbtxt = path.join(annotationsDir, file.slice(0, -4));
+          fs.copyFileSync(bakFile, targetPbtxt);
+          fs.unlinkSync(bakFile);
+        }
+      }
+      console.log('Restored annotations .pbtxt files from backup.');
+    } catch (_) {}
+  }
+
+  // 清理备份清单与标题缓存
+  const manifestPath = path.join(antigravityRoot, 'historical_titles_backup.json');
+  if (fs.existsSync(manifestPath)) {
+    try { fs.unlinkSync(manifestPath); } catch (_) {}
+  }
+  const titleCacheFile = path.join(antigravityRoot, 'title_api_cache.json');
+  if (fs.existsSync(titleCacheFile)) {
+    try { fs.unlinkSync(titleCacheFile); } catch (_) {}
+  }
+} catch (_) {}
+
+try {
+  console.log('4. Removing plugin directory:', targetPluginDir);
   const cleanupCode = `
     const fs = require('fs');
     setTimeout(() => {

@@ -36,6 +36,11 @@ function httpGetJson(port, urlPath) {
 
 function evalInTarget(wsUrl, expression) {
   return new Promise((resolve, reject) => {
+    if (typeof WebSocket === 'undefined') {
+      return reject(
+        new Error('当前 Node.js 环境未提供全局 WebSocket，实时注入需要 Node.js >= 22 或启动参数带 --experimental-websocket')
+      );
+    }
     const ws = new WebSocket(wsUrl);
     const timer = setTimeout(() => {
       try { ws.close(); } catch (_) {}
@@ -90,7 +95,9 @@ async function injectOnce(action = 'apply') {
   try {
     const cacheFile = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
     if (fs.existsSync(cacheFile)) {
-      titleCacheCode = `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},);}catch(_){}\n`;
+      const cacheStr = fs.readFileSync(cacheFile, 'utf8');
+      const safeJson = JSON.stringify(JSON.parse(cacheStr));
+      titleCacheCode = `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${safeJson});}catch(_){}\n`;
     }
   } catch (_) {}
 
