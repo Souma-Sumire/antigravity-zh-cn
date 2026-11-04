@@ -96,6 +96,19 @@ function isValidUiString(str) {
   // 排除纯数字或符号
   if (/^[\d\s.,:;!?_+\-*\/()\[\]{}#%@<>=&^~$`|\\'"“”‘’]+$/.test(s)) return false;
 
+  // 排除内部调用、开发专有名词或特定代码片段
+  if (s.startsWith('",') || s.startsWith(',l),') || s.startsWith(',k),') || s.startsWith('Math.') || s.startsWith('Re(')) return false;
+  if (s.startsWith('[Agent') || s.startsWith('[App') || s.startsWith('[Custom') || s.startsWith('[Extens') || s.startsWith('[Mcp') || s.startsWith('[Proj') || s.startsWith('[Traj')) return false;
+  if (s.startsWith('chromium/') || s.startsWith('googleplex-') || s.startsWith('you@') || s.startsWith('e.g.') || s.startsWith('e.g.,') || s.startsWith('E.g.')) return false;
+  if (s.startsWith('Based on') || s.startsWith('Copyright') || s.startsWith('Released under') || s.startsWith('example:')) return false;
+  if (s.startsWith('\\\\') || s.includes('read_resource') || s.includes('projectManagementService')) return false;
+  if (['BoN', 'Fig', 'JJ', 'Buganizer', 'Google3', 'CitC Workspace', 'Cog Workspace', 'I.zoom'].includes(s)) return false;
+  if (s.startsWith('schema.token.') || s.startsWith('border ') || s.includes('placeholder:') || s.includes('toLowerCase()')) return false;
+  if (s.startsWith('":') || s.includes('":') || s.includes("':") || s === '\\n') return false;
+  if (s.startsWith('dial tcp') || s.startsWith('no such host') || s.startsWith('connection refused') || s.startsWith('i/o timeout')) return false;
+  if (s.startsWith('Rpc failed') || s.startsWith('SCRIPT_BUDGET_TIMEOUT') || s.startsWith('Navigation timeout') || s.startsWith('PageAgent batch call')) return false;
+  if (['InstanceUnreachableError', 'username:password', 'convgroup:'].includes(s)) return false;
+
   // 必须含有英文字母
   if (!/[a-zA-Z]/.test(s)) return false;
 
@@ -107,7 +120,7 @@ function extractCandidatesFromCode(code) {
   const candidates = new Set();
 
   // 模式 1: UI 对象属性
-  const propRegex = /\b(?:label|title|description|tooltip|placeholder|message|header|heading|emptyText|emptyMessage|btnText|buttonText|confirmText|cancelText|tabName|actionText|helpText|hintText|subtext|prompt)\s*:\s*(["'])(.+?)\1/g;
+  const propRegex = /\b(?:label|title|description|tooltip|placeholder|message|header|heading|emptyText|emptyMessage|btnText|buttonText|confirmText|cancelText|tabName|actionText|helpText|hintText|subtext|prompt|subtitle|badge|detail|errorMessage|successMessage|warningMessage)\s*:\s*(["'])(.+?)\1/g;
   let m;
   while ((m = propRegex.exec(code)) !== null) {
     if (isValidUiString(m[2])) candidates.add(m[2]);
@@ -129,6 +142,28 @@ function extractCandidatesFromCode(code) {
   const menuActionRegex = /\{label:\s*(["'])(.+?)\1/g;
   while ((m = menuActionRegex.exec(code)) !== null) {
     if (isValidUiString(m[2])) candidates.add(m[2]);
+  }
+
+  // 模式 5: 选项返回值函数 resolveOptionToString/resolveOptionToDescription
+  const resolveRegex = /resolveOptionTo(?:String|Description):\s*(?:[a-zA-Z0-9_]+|\([a-zA-Z0-9_,\s]*\))\s*=>\s*([^,\n\]\}]+|\{(?:[^{}]|\{[^{}]*\})*\})/g;
+  while ((m = resolveRegex.exec(code)) !== null) {
+    const body = m[1];
+    const strRegex = /(["'])(.+?)\1/g;
+    let sm;
+    while ((sm = strRegex.exec(body)) !== null) {
+      if (isValidUiString(sm[2])) candidates.add(sm[2]);
+    }
+  }
+
+  // 模式 6: 属性条件与三目运算符表达式 (例如 placeholder: cond ? "Str1" : "Str2")
+  const ternaryRegex = /\b(?:label|title|description|tooltip|placeholder|message|header|heading|emptyText|emptyMessage|btnText|buttonText|confirmText|cancelText|tabName|actionText|helpText|hintText|subtext|prompt|subtitle|badge|detail|errorMessage|successMessage|warningMessage|["']aria-label["']|["']placeholder["']|["']title["'])\s*:\s*([^,{}]+)/g;
+  while ((m = ternaryRegex.exec(code)) !== null) {
+    const expr = m[1];
+    const innerStrRegex = /(["'])(.+?)\1/g;
+    let sm;
+    while ((sm = innerStrRegex.exec(expr)) !== null) {
+      if (isValidUiString(sm[2])) candidates.add(sm[2]);
+    }
   }
 
   return candidates;
