@@ -25,6 +25,28 @@
   }
 
   const EXACT_MAP = {
+    "Uses your local files and tools. Schedules only.": "使用您的本地文件与工具。仅限计划任务。",
+    "Runs even when your computer is off. Schedules and events.": "即使您的计算机处于关闭状态也能运行。包含计划任务与事件。",
+    "Runs even when your computer is off. Schedules only.": "即使您的计算机处于关闭状态也能运行。仅限计划任务。",
+    "Instructions": "指令",
+    "at": "于",
+    "Where it runs": "运行位置",
+    "Create a project first.": "请先创建一个项目。",
+    "Creating…": "正在创建…",
+    "Creating\\u2026": "正在创建…",
+
+    "Work in a New Worktree": "在新的工作树中工作",
+    "Keeps your checkout untouched": "保持当前检出内容不受影响",
+    "Unknown Worktree": "未知工作树",
+    "new worktree": "新的工作树",
+    "New worktree": "新的工作树",
+    "Base branch for new worktree": "新的工作树的基础分支",
+
+    "What can we get done today?": "今天我们要做些什么？",
+    "What can we get done today": "今天我们要做些什么",
+    "Next card": "下一张卡片",
+    "Previous card": "上一张卡片",
+
     "Enter Queues after the turn": "Enter 轮次结束后排队发送",
     "Enter Sends immediately": "Enter 立即发送",
     "Alt+Enter Sends immediately": "Alt+Enter 立即发送",
@@ -92,7 +114,12 @@
     "Worktree Branches": "工作树分支",
     "Unknown Project": "未知项目",
     "Untitled Conversation": "无标题会话",
+    "Working": "处理中",
     "Working...": "处理中...",
+    "Worked": "已处理",
+    "Compacting": "压缩中",
+    "Thinking...": "思考中...",
+    "Thinking…": "思考中...",
     "Prompt": "提示词",
     "Document": "文档",
     "Bounding box": "边界框",
@@ -221,6 +248,14 @@
     "Search filters…": "搜索筛选器…",
     "Search filters\\u2026": "搜索筛选器…",
     "Search connectors": "搜索连接器",
+    "Browse Connectors": "浏览连接器",
+    "No connectors available in this project": "此项目中无可用连接器",
+    "No connectors available in this workspace": "此工作区中无可用连接器",
+    "Loading connectors…": "正在加载连接器…",
+    "Loading connectors\u2026": "正在加载连接器…",
+    "0 on for this conversation": "当前会话已启用 0 个",
+    "1 on for this conversation": "当前会话已启用 1 个",
+    "on for this conversation": "个已在此会话启用",
     "Search branches": "搜索分支",
     "Input device for voice mode and dictation.": "语音模式与听写所使用的输入设备。",
     "Mute Voice Mic": "静音语音麦克风",
@@ -303,8 +338,8 @@
 
     "Agent finished.": "Agent 已完成。",
     "Agent finished": "Agent 已完成",
-    "Subagent finished.": "Subagent 已完成。",
-    "Subagent finished": "Subagent 已完成",
+    "Subagent finished.": "子 Agent 已完成。",
+    "Subagent finished": "子 Agent 已完成",
     "Task finished.": "任务已完成。",
     "Task finished": "任务已完成",
     "Agent finished running": "Agent 已运行完成",
@@ -446,7 +481,7 @@
     "Get notified when the agent needs your attention or completes a task.": "在 Agent 需要您确认或完成任务时接收通知。",
     "Keeps working in this folder. Nothing is copied.": "直接在此文件夹中工作，不复制任何内容。",
     "Sent to Chief of Staff": "已发送给幕僚长",
-    "Team of subagents to do long running work": "协同执行长时间运行任务的 Subagent 团队",
+    "Team of subagents to do long running work": "协同执行长时间运行任务的子 Agent 团队",
     "Updates to your sidebar": "侧边栏更新",
     "Uploaded project files and in-chat attachments are stored on Google servers and mounted into your cloud sandbox so your agent can read and work with them.": "上传的项目文件与会话附件存储于 Google 服务器，并挂载到您的云端沙箱中，以便 Agent 读取与处理。",
     "Force push": "强制推送",
@@ -706,8 +741,8 @@
     "Setting up…": "正在启动/设置中...",
     "Agent": "Agent",
     "Agents": "Agent",
-    "Subagent": "Subagent",
-    "Subagents": "Subagent",
+    "Subagent": "子 Agent",
+    "Subagents": "子 Agent",
     "Task": "任务",
     "Tasks": "任务",
     "Workspace": "工作区",
@@ -785,7 +820,7 @@
     "Write Files": "写入文件",
     "Run Commands": "运行命令",
     "Web Browsing": "网页浏览",
-    "Define Subagents": "定义 Subagent",
+    "Define Subagents": "定义子 Agent",
     "Call MCP Tools": "调用 MCP 工具",
     "Inherit Workspace": "继承工作区",
     "Branch Workspace": "分支隔离工作区",
@@ -853,7 +888,7 @@
     "Customizations": "自定义",
     "Configure default behaviors, skills, and MCP servers.": "配置默认行为、Skill 与 MCP 服务器。",
     "Token Usage": "Token 使用量",
-    "The breakdown below shows token usage from customizations like skills, rules, and MCP. If the budget is exceeded, large customizations will be truncated automatically.": "下方细目展示了 Skill、规则和 MCP 等个性化定制的 Token 使用量。如果超出预算额度，大型定制组件将被自动截断。",
+    "The breakdown below shows token usage from customizations like skills, rules, and MCP. If the budget is exceeded, large customizations will be truncated automatically.": "下方细目展示了 Skill、Rule 和 MCP 等个性化定制的 Token 使用量。如果超出预算额度，大型定制组件将被自动截断。",
     "of the customization budget is available.": "的自定义额度可用。",
     "% of the customization budget is available.": "% 的自定义额度可用。",
     "% of the customization budget is available。": "% 的自定义额度可用。",
@@ -891,7 +926,7 @@
     "work with Google developer products.": "协同 Google 开发者产品工作。",
     "work with Google developer products": "协同 Google 开发者产品工作",
     "Plugins built and maintained by Google to extend Antigravity capabilities.": "由 Google 官方构建并维护，用于全面扩展 Antigravity 各项能力的插件。",
-    "Explore, install, and manage plugins to enhance your agent with specialized skills, MCP servers, and rules.": "浏览、安装并管理插件，为 Agent 扩展专属 Skill、MCP 服务器与执行规则。",
+    "Explore, install, and manage plugins to enhance your agent with specialized skills, MCP servers, and rules.": "浏览、安装并管理插件，为 Agent 扩展专属 Skill、MCP 服务器与 Rule。",
     "Discover plugins to integrate with Google APIs, Cloud services, and developer tools.": "发现并集成适用于 Google API、云服务及开发者工具的官方插件。",
     "Install Plugin": "安装插件",
     "Uninstall Plugin": "卸载插件",
@@ -1000,8 +1035,8 @@
     "Use this skill when building real-time, bidirectional streaming applications with the Gemini Live API. Covers WebSocket-based audio/video/text streaming, voice activity detection (VAD), native audio features, function calling, session management, ephemeral tokens for client-side auth, live translation, and all Live API configuration options. SDKs covered - google-genai (Python), @google/genai (JavaScript/TypeScript).": "在通过 Gemini Live API 构建低延迟双向实时流式应用时使用此 Skill。覆盖基于 WebSocket 的音视频/文本流、语音活动检测 (VAD)、原生音频特性、函数调用、会话管理、客户端临时 Token 认证、实时翻译及所有 Live API 配置项。",
     "Use this skill for generative video editing, text-to-video, image-referenced video generation, first-frame-to-video, first-and-last-frame transitions, and video extensions using Gemini Omni 1.1 Flash (gemini-omni-1.1-flash) via the official google-genai SDK. Includes workflows for pre-processing/optimizing high-resolution or long source videos with ffmpeg, stripping audio for full sound regeneration, and handling turn-by-turn video editing and parallel execution.": "在使用 Gemini Omni 1.1 Flash (gemini-omni-1.1-flash) 通过官方 google-genai SDK 进行生成式视频编辑、文生视频、图像参考视频生成、首尾帧过渡及视频拓展时使用此 Skill。包含使用 ffmpeg 预处理优化高分辨率源视频、音频分离以及多轮分步编辑工作流。",
     "How to render rich interactive HTML widgets inline in the chat or as standalone artifacts. Use this skill when you want to show the user diagrams, data visualizations, interactive controls, educational walkthroughs, or any rich visual content beyond plain text and markdown.": "如何在对话中以内联方式或作为独立工件渲染丰富的交互式 HTML 小部件。当需要向用户展示架构图表、数据可视化、交互式控件、教程回顾或超出纯文本与 Markdown 的丰富视觉内容时使用此 Skill。",
-    "Comprehensive guide and reference for the Antigravity Customization System. Use to explain how customizations work, their loading priority, discovery mechanisms, and to guide the creation of skills, rules, plugins, hooks, and MCP servers.": "Antigravity 自定义系统的完整指南与参考。用于阐述自定义项的工作机制、加载优先级、发现规则，并指导 Skill、规则、插件、Hook 及 MCP 服务的创建。",
-    "Provides a comprehensive guide, quick reference, and sitemap for Google Antigravity (AGY), including the Antigravity CLI (agy), Antigravity 2.0, Antigravity IDE, Python SDK, slash commands, keybindings, and customizations (skills, rules, MCP, sidecars). Activate this skill when the user asks questions about how to use, configure, or customize Antigravity, AGY, the agy CLI, the Antigravity IDE, or Antigravity 2.0.": "提供 Google Antigravity (AGY) 的完整指南、速查参考与系统导航，涵盖 Antigravity CLI (agy)、Antigravity 2.0、Antigravity IDE、Python SDK、斜杠命令、快捷键及自定义（Skill、规则、MCP、Sidecar）。",
+    "Comprehensive guide and reference for the Antigravity Customization System. Use to explain how customizations work, their loading priority, discovery mechanisms, and to guide the creation of skills, rules, plugins, hooks, and MCP servers.": "Antigravity 自定义系统的完整指南与参考。用于阐述自定义项的工作机制、加载优先级、发现规则，并指导 Skill、Rule、插件、Hook 及 MCP 服务的创建。",
+    "Provides a comprehensive guide, quick reference, and sitemap for Google Antigravity (AGY), including the Antigravity CLI (agy), Antigravity 2.0, Antigravity IDE, Python SDK, slash commands, keybindings, and customizations (skills, rules, MCP, sidecars). Activate this skill when the user asks questions about how to use, configure, or customize Antigravity, AGY, the agy CLI, the Antigravity IDE, or Antigravity 2.0.": "提供 Google Antigravity (AGY) 的完整指南、速查参考与系统导航，涵盖 Antigravity CLI (agy)、Antigravity 2.0、Antigravity IDE、Python SDK、斜杠命令、快捷键及自定义（Skill、Rule、MCP、Sidecar）。",
     "Account": "账号",
     "Manage your plan, credentials, and general preferences.": "管理方案、凭据与偏好设置。",
     "Enable Telemetry": "启用遥测",
@@ -1017,10 +1052,10 @@
     "Follow the guide at": "请参考此指南：",
     "to back up your data and run the migration.": "以备份您的数据并执行迁移。",
     "Browser Settings": "浏览器设置",
-    "Configure the browser subagent. It requires Google Chrome to be installed. The browser subagent can be invoked by typing /browser in the conversation input box.": "配置浏览器 Subagent。需要安装 Google Chrome。在对话输入框中输入 /browser 即可调用浏览器 Subagent。",
-    "Configure the browser subagent. It requires Google Chrome to be installed. The browser subagent can be invoked by typing": "配置浏览器 Subagent。这需要安装 Google Chrome。可以通过输入",
-    "Configure the browser subagent. It requires": "配置浏览器 Subagent。此功能需要安装",
-    "in the conversation input box.": "在对话输入框中调用浏览器 Subagent。",
+    "Configure the browser subagent. It requires Google Chrome to be installed. The browser subagent can be invoked by typing /browser in the conversation input box.": "配置浏览器子 Agent。需要安装 Google Chrome。在对话输入框中输入 /browser 即可调用浏览器子 Agent。",
+    "Configure the browser subagent. It requires Google Chrome to be installed. The browser subagent can be invoked by typing": "配置浏览器子 Agent。这需要安装 Google Chrome。可以通过输入",
+    "Configure the browser subagent. It requires": "配置浏览器子 Agent。此功能需要安装",
+    "in the conversation input box.": "在对话输入框中调用浏览器子 Agent。",
     "Browser Javascript Execution Policy": "浏览器 JS 执行策略",
     "Controls whether the agent can run custom JavaScript to automate complex browser actions.": "控制 Agent 是否可以运行自定义 JavaScript 以实现复杂的浏览器自动化操作。",
     "Request Review": "请求审查",
@@ -1232,7 +1267,7 @@
     "Install IDE": "安装 IDE",
     "App": "应用",
     "Inherits from": "继承自",
-    "Rules": "规则",
+    "Rules": "Rule",
     "Skills": "Skill",
     "Plugin": "插件",
     "Plugins": "插件",
@@ -1256,7 +1291,7 @@
     "Editor": "编辑器",
     "Editor Settings": "编辑器设置",
     "Open Editor Settings": "打开编辑器设置",
-    "Configure the browser subagent.": "配置浏览器 Subagent。",
+    "Configure the browser subagent.": "配置浏览器子 Agent。",
     "It requires": "它需要",
     "Google Chrome to be installed.": "安装 Google Chrome。",
     "The browser subagent can be invoked by typing": "可以通过输入",
@@ -1297,6 +1332,9 @@
     "Manage application settings.": "管理应用设置。",
     "Refresh quota and credits data": "刷新配额与积分数据",
     "No conversations yet": "暂无对话",
+    "No automations yet": "暂无自动化",
+    "No scheduled tasks yet": "暂无计划任务",
+    "Run a prompt on a schedule, like a morning summary of yesterday's changes. Runs show up here.": "按计划定时运行提示词，例如汇总昨日变更的早间简报。运行记录将显示在此处。",
     "No conversation yet": "暂无对话",
     "Add an MCP Server": "添加 MCP 服务器",
     "width": "宽度",
@@ -1306,7 +1344,7 @@
     "preference": "偏好",
     "preferences": "偏好",
     "application": "应用",
-    "subagent": "Subagent",
+    "subagent": "子 Agent",
     "notification": "通知",
     "notifications": "通知",
     "bot": "机器人",
@@ -1364,7 +1402,7 @@
     "Opened browser": "已打开浏览器",
     "Read URL": "读取 URL",
     "Searched web": "网页搜索",
-    "Invoked subagent": "调用 Subagent",
+    "Invoked subagent": "调用子 Agent",
     "Git commit": "Git 提交",
     "Searched for files": "搜索文件",
     "Searched files": "已搜索文件",
@@ -1491,8 +1529,8 @@
     "Expand Diffs": "展开差异",
     "Collapse queued messages": "折叠排队消息",
     "Expand queued messages": "展开排队消息",
-    "Collapse subagents": "折叠 Subagent",
-    "Expand subagents": "展开 Subagent",
+    "Collapse subagents": "折叠子 Agent",
+    "Expand subagents": "展开子 Agent",
     "Collapse idle": "折叠空闲项",
     "Collapse string": "折叠字符串",
     "Expand long string": "展开长字符串",
@@ -1592,7 +1630,7 @@
     "Loading page": "正在加载页面",
     "Loading resources...": "正在加载资源...",
     "Loading skills...": "正在加载 Skill...",
-    "Loading subagent...": "正在加载 Subagent...",
+    "Loading subagent...": "正在加载子 Agent...",
     "Loading token usage...": "正在加载 Token 用量...",
     "Loading trajectory...": "正在加载执行轨迹...",
     "Loading workspace customizations...": "正在加载工作区自定义...",
@@ -1629,9 +1667,9 @@
     "Cancel Generation": "取消生成",
     "Cancel recording": "取消录制",
     "Cancel Sending Message": "取消发送消息",
-    "Stop All Subagents": "停止所有 Subagent",
-    "Stop Subagent": "停止 Subagent",
-    "Stop subagent": "停止 Subagent",
+    "Stop All Subagents": "停止所有子 Agent",
+    "Stop Subagent": "停止子 Agent",
+    "Stop subagent": "停止子 Agent",
     "Stop Task": "停止任务",
     "Stop Voice Recording": "停止语音录制",
     "Stop recording": "停止录制",
@@ -1738,7 +1776,7 @@
     "Open a merge request": "创建 MR",
     "Merge Conflict": "合并冲突",
     "Undo to Here": "撤销至此处",
-    "Run in a new worktree": "在新建工作树中运行",
+    "Run in a new worktree": "在新的工作树中运行",
     "Run in a new git worktree": "在新的 Git 工作树中运行",
     "Run in your current workspace": "在当前工作区中运行",
     "Download File": "下载文件",
@@ -1910,7 +1948,7 @@
     "read access": "读取权限",
     "write access": "写入权限",
     "specific files or directories": "特定文件或目录",
-    "The browser subagent can be invoked by typing /browser in the conversation input box.": "在对话输入框中输入 /browser 即可调用浏览器 Subagent。",
+    "The browser subagent can be invoked by typing /browser in the conversation input box.": "在对话输入框中输入 /browser 即可调用浏览器子 Agent。",
     "Missing": "缺失",
     "Missing folder": "缺失文件夹",
     "Missing Folder": "缺失文件夹",
@@ -2238,12 +2276,12 @@
     "A license or project selection is required to use Antigravity.": "使用 Antigravity 需要具备许可证或选择关联项目。",
     "Teamwork": "团队协作",
     "teamwork": "团队协作",
-    "Manage Subagents": "管理 Subagent",
-    "manage subagents": "管理 Subagent",
-    "Active Subagents": "活跃 Subagent",
-    "Invoke subagent": "调用 Subagent",
-    "Define subagent": "定义 Subagent",
-    "Kill subagent": "终止 Subagent",
+    "Manage Subagents": "管理子 Agent",
+    "manage subagents": "管理子 Agent",
+    "Active Subagents": "活跃子 Agent",
+    "Invoke subagent": "调用子 Agent",
+    "Define subagent": "定义子 Agent",
+    "Kill subagent": "终止子 Agent",
     "Kill all": "终止全部",
     "Waiting for input": "等待输入",
     "Waiting for dependents": "等待依赖任务",
@@ -2256,9 +2294,9 @@
     "Transcript logs": "转录日志",
     "Reactive Wakeup": "响应式唤醒",
     "No polling needed": "无需轮询",
-    "Subagent conversation": "Subagent 对话",
+    "Subagent conversation": "子 Agent 对话",
     "Parent agent": "父 Agent",
-    "Child agent": "Subagent",
+    "Child agent": "子 Agent",
     "Isolated branch": "隔离分支",
     "Shared repository": "共享仓库",
     "Workspace directory permissions": "工作区目录权限",
@@ -2314,7 +2352,7 @@
     "Specific sender": "特定发送者",
     "Expired": "已过期",
     "Skill": "Skill",
-    "Rule": "规则",
+    "Rule": "Rule",
     "Sidecars": "Sidecars",
     "Hooks": "Hooks",
     "App Data Directory": "应用数据目录",
@@ -2358,7 +2396,7 @@
     "Artifact not found": "未找到产物文件",
     "could not be opened": "无法打开",
     "Tool definitions": "工具定义",
-    "Subagent definitions": "Subagent 定义",
+    "Subagent definitions": "子 Agent 定义",
     "Command Palette": "命令面板",
     "Command Palette...": "命令面板...",
     "Command palette": "命令面板",
@@ -3115,7 +3153,7 @@
     "Schedule recurring workflows or set delayed reminders": "调度周期性工作流或设定延时提醒",
     "Generate a detailed step-by-step implementation plan": "生成详尽的分步实施计划",
     "Interactive interview to clarify and align requirements": "通过互动访谈厘清需求与设计决策",
-    "Coordinate multiple autonomous subagents": "多 Subagent 并行协作预览模式",
+    "Coordinate multiple autonomous subagents": "多子 Agent 并行协作预览模式",
     "Save corrected workflows and habits to long-term memory": "将纠正后的工作流与习惯沉淀至长期记忆",
     "Deep thinking and multi-perspective verification mode": "深度思考与多重视角交叉验证增强模式",
     "Choose the experience that fits how you work.": "选择适合您工作方式的操作体验。",
@@ -3123,8 +3161,8 @@
     "Choose between the Default and Project 4K experience.": "在默认体验与 Project 4K 体验之间切换。",
     "Choose between the Default and Project 4K experience": "在默认体验与 4K 项目体验之间切换",
     "Project 4K": "项目 4K",
-    "The breakdown below shows token usage from customizations like rules, skills, and MCP. If a budget is exceeded, large rules are demoted to path pointers and large customizations are excluded automatically.": "下方显示规则、Skill 与 MCP 等自定义项的 Token 占用。超出预算时，大型规则将降级为路径指针，过大的自定义项将被自动排除。",
-    "The breakdown below shows token usage from customizations like rules, skills, and MCP.": "下方显示来自规则、Skill 与 MCP 等自定义项的 Token 占用。",
+    "The breakdown below shows token usage from customizations like rules, skills, and MCP. If a budget is exceeded, large rules are demoted to path pointers and large customizations are excluded automatically.": "下方显示 Rule、Skill 与 MCP 等自定义项的 Token 占用。超出预算时，大型 Rule 将降级为路径指针，过大的自定义项将被自动排除。",
+    "The breakdown below shows token usage from customizations like rules, skills, and MCP.": "下方显示来自 Rule、Skill 与 MCP 等自定义项的 Token 占用。",
     "If a budget is exceeded, large rules are demoted to path pointers and large customizations are excluded automatically.": "超出预算时，大型规则将降级为路径指针，过大的自定义项将被自动排除。",
     "Other Customizations": "其他自定义项",
     "Show 1 breakdown": "显示 1 项明细",
@@ -3249,12 +3287,12 @@
     "Build with Google": "使用 Google 构建",
     "Build on Google's developer platforms, including Android, Chrome, Gemini, and Google Cloud.": "基于 Google 开发者平台进行构建，涵盖 Android、Chrome、Gemini 与 Google Cloud。",
     "Integration skill and tools for Google Maps Platform APIs": "用于 Google Maps Platform API 的集成 Skill 与工具套件",
-    "Official plugin for Dart and Flutter that installs Flutter/Dart Skills, Rules, Custom Agents, and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase": "Dart 与 Flutter 官方插件，提供 Flutter/Dart Skill、规则、自定义 Agent 与 Dart MCP 服务器，支持从单一代码库构建适用于移动端、Web、桌面及嵌入式设备的原生编译精美应用。",
+    "Official plugin for Dart and Flutter that installs Flutter/Dart Skills, Rules, Custom Agents, and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase": "Dart 与 Flutter 官方插件，提供 Flutter/Dart Skill、Rule、自定义 Agent 与 Dart MCP 服务器，支持从单一代码库构建适用于移动端、Web、桌面及嵌入式设备的原生编译精美应用。",
     "Prototype, build & run modern apps that users love with Firebase's backend, AI, and operational infrastructure.": "借助 Firebase 的后端、AI 和运维基础设施，原型设计、构建并运行深受用户喜爱的现代化应用程序。",
     "Curated collection of agent skills for science tasks.": "精选的面向科学计算与科研任务的 AgentSkill 套件。",
     "Using the Google Antigravity Python SDK to build AI agents": "使用 Google Antigravity Python SDK 构建 AI Agent",
     "Interactive guide to design and create a scheduled background automation. Use this skill when the user wants to create an automated or recurring scheduled task (e.g. \\\"summarize my emails every morning\\\", \\\"every Monday send me a to-do list\\\"). Also triggered by the /automation slash command.": "设计与创建后台定时自动化的指南。当用户需要创建定时或循环调度流程时使用（如“每天早上汇总邮件”、“每周一发送待办清单”），亦可通过 /automation 命令触发。",
-    "How to manage and create plugins — namespaced bundles of skills, agents, rules, MCP servers and hooks that install, enable and disable as a single unit. Use this skill when the user wants to enable, disable, install or uninstall a plugin, when they want to create a new plugin, or when a new customization should be packaged into a plugin rather than left loose. Also triggered by the /plugin slash command. Don't use for the underlying customization system itself — discovery roots, loading priority, or authoring a standalone skill, agent, rule, hook or MCP server outside a plugin; see the customizations guide skill for those.": "管理与创建插件的指南——插件是将 Skill、Agent、规则、MCP 服务器和 Hook 整合成具有独立命名空间的套件包，支持作为独立单元进行安装、启用与禁用。当用户需要管理插件、创建新插件或将扩展组件打包封装时使用。亦可通过 /plugin 斜杠命令触发。",
+    "How to manage and create plugins — namespaced bundles of skills, agents, rules, MCP servers and hooks that install, enable and disable as a single unit. Use this skill when the user wants to enable, disable, install or uninstall a plugin, when they want to create a new plugin, or when a new customization should be packaged into a plugin rather than left loose. Also triggered by the /plugin slash command. Don't use for the underlying customization system itself — discovery roots, loading priority, or authoring a standalone skill, agent, rule, hook or MCP server outside a plugin; see the customizations guide skill for those.": "管理与创建插件的指南——插件是将 Skill、Agent、Rule、MCP 服务器和 Hook 整合成具有独立命名空间的套件包，支持作为独立单元进行安装、启用与禁用。当用户需要管理插件、创建新插件或将扩展组件打包封装时使用。亦可通过 /plugin 斜杠命令触发。",
     "Build, package, run, and debug UI extensions for Antigravity: interactive web panels that render in the side pane, served by a Node.js sidecar using the built-in Sidecar SDK.": "构建、打包、运行与调试 Antigravity UI 扩展：在侧边窗格中渲染的交互式 Web 面板，由基于内置 Sidecar SDK 的 Node.js sidecar 提供服务。",
     "Discover UI plugin panels relevant to the current task and surface a one-click pill in chat to open (toggle) them in the side pane. Use when a running UI plugin's panel would help with what the user is doing, or right after the user enables a new UI plugin pane and a shortcut to open it is handy.": "发现与当前任务相关的 UI 插件面板，并在对话中提供一键展开胶囊按钮，以便在侧边窗格中快速切换显示。",
     "Guidelines for interacting with GitHub, prompting the user for approval when commands fail due to agent environment restrictions.": "与 GitHub 交互的操作准则，当命令因 Agent 环境限制执行失败时向用户申请授权。",
@@ -3294,7 +3332,7 @@
     "sending": "正在发送",
     "Browser Actuation Permissions": "浏览器操作权限",
     "Browser Configuration Required": "需要配置浏览器",
-    "Browser Subagent Viewer": "浏览器 Subagent 视图",
+    "Browser Subagent Viewer": "浏览器子 Agent 视图",
     "Browser User Profile Path": "浏览器用户配置目录路径",
     "Browser actions": "浏览器操作",
     "New Browser": "新建浏览器",
@@ -3343,7 +3381,7 @@
     "Run in a new jj workspace or Fig share": "在新的 jj 工作区或 Fig 共享中运行",
     "Start in a new Fig share (go/fig-shares)": "在新的 Fig 共享中开始",
     "Create a JJ worktree": "创建 JJ 工作树",
-    "New Worktree": "新建工作树",
+    "New Worktree": "新的工作树",
     "Previous Worktrees": "历史工作树",
     "Search past worktrees...": "搜索历史工作树...",
     "No previous worktrees": "无历史工作树",
@@ -3733,7 +3771,7 @@
     "Attached context": "已附带的上下文",
     "Markdown view mode": "Markdown 视图模式",
     "Drag to move": "拖拽移动",
-    "Subagent:": "Subagent：",
+    "Subagent:": "子 Agent：",
     "Daily limit": "每日额度",
     "Drive": "云端硬盘",
     "Uploads logs, settings, conversation summaries, and voice call traces to your Drive.": "将日志、设置、对话摘要与语音通话轨迹上传至您的 Google 云端硬盘。",
@@ -3837,16 +3875,16 @@
     "Pay As You Go": "按量付费",
     "Pay only for the tokens you use, billed through Agent Platform (formerly Vertex AI).": "仅为您实际使用的 Token 付费，通过 Agent Platform（原 Vertex AI）计费。",
     "Ask anything, @ to mention": "输入问题，输入 @ 引用上下文",
-    "Message subagent, @ to mention, / for actions": "向 Subagent 发送消息，输入 @ 引用，输入 / 调用指令",
-    "Message subagent, @ to mention": "向 Subagent 发送消息，输入 @ 引用",
+    "Message subagent, @ to mention, / for actions": "向子 Agent 发送消息，输入 @ 引用，输入 / 调用指令",
+    "Message subagent, @ to mention": "向子 Agent 发送消息，输入 @ 引用",
     "Enter a prompt for the agent to run...": "输入要让 Agent 执行的提示词...",
     "Initializing...": "正在初始化...",
     "Max": "最高",
     "Background Tasks": "后台任务",
     "Background Task": "后台任务",
     "Background Task Output": "后台任务输出",
-    "Child Subagent": "Subagent",
-    "Subagent Conversation": "Subagent 对话",
+    "Child Subagent": "子 Agent",
+    "Subagent Conversation": "子 Agent 对话",
     "Parent Conversation": "父级对话",
     "Root Conversation": "根对话",
     "Modified Files": "已修改文件",
@@ -4065,8 +4103,8 @@
     "Needs reconnect": "需要重新连接",
     "Blocked, needs input": "已阻塞，需要输入",
     "Confirmation required to execute this step": "执行此步骤需要确认",
-    "Subagent ended": "Subagent 已结束",
-    "View child subagents": "查看 Subagent",
+    "Subagent ended": "子 Agent 已结束",
+    "View child subagents": "查看子 Agent",
     "Queued Messages": "排队中的消息",
     "Queued messages": "排队中的消息",
     "Message queued.": "消息已加入队列。",
@@ -4088,7 +4126,7 @@
     "Migrate with Agent": "让 Agent 迁移",
     "No conversations available": "暂无可用对话",
     "No background tasks": "暂无后台任务",
-    "No subagents": "暂无 Subagent",
+    "No subagents": "暂无子 Agent",
     "No links": "暂无链接",
     "No uploads": "暂无上传文件",
     "No Results": "无结果",
@@ -4342,7 +4380,7 @@
     "Explore the plugin marketplace": "探索插件市场",
     "Discover helpful skills & plugins": "发现实用 Skill 与插件",
     "Build with one agent or a team": "使用单个 Agent 或 Agent 团队构建",
-    "Describe what you want. Your agent plans and builds it, and brings in other agents when needed.": "描述您的需求，Agent 会自动规划并构建，并在需要时协同其他 Subagent。",
+    "Describe what you want. Your agent plans and builds it, and brings in other agents when needed.": "描述您的需求，Agent 会自动规划并构建，并在需要时协同其他 Agent。",
     "Terms of Service & Data Use": "服务条款与数据使用说明",
     "Manage workspace folders, agent settings, and permissions.": "管理工作区文件夹、Agent 设置与权限。",
     "Manage project resources, agent settings, and permissions.": "管理项目资源、Agent 设置与权限。",
@@ -4402,8 +4440,8 @@
     "Edit Workspace Name": "编辑工作区名称",
     "Failed to save image:": "保存图片失败：",
     "Plugins are packaged collections of skills and MCPs to help the Agent": "插件是 Skill 与 MCP 的打包集合，可协助",
-    "to be installed. The browser subagent can be invoked by typing /browser in the conversation input box.": "。您可以在对话输入框中输入 /browser 来调用浏览器 Subagent。",
-    "The browser subagent has been disabled by your administrator. Contact your administrator to enable browser use.": "管理员已禁用浏览器 Subagent。请联系您的管理员以启用浏览器功能。",
+    "to be installed. The browser subagent can be invoked by typing /browser in the conversation input box.": "。您可以在对话输入框中输入 /browser 来调用浏览器子 Agent。",
+    "The browser subagent has been disabled by your administrator. Contact your administrator to enable browser use.": "管理员已禁用浏览器子 Agent。请联系您的管理员以启用浏览器功能。",
     "For Antigravity Business consumption options, see": "有关 Antigravity 企业版消费选项，请参阅",
     "documentation": "官方文档",
     "Not shared automatically—share with": "不会自动共享——请发送至",
@@ -4440,7 +4478,7 @@
     "Stop Editing": "停止编辑",
     "Middle Click": "鼠标中键点击",
     "No keyboard shortcuts found matching your filter.": "未找到匹配筛选条件的键盘快捷键。",
-    "Browser Subagent": "浏览器 Subagent",
+    "Browser Subagent": "浏览器子 Agent",
     "This Computer": "此电脑",
     "Pause (k)": "暂停 (k)",
     "Play (k)": "播放 (k)",
@@ -4499,8 +4537,8 @@
     "Background Commands": "后台命令",
     "No background commands": "无正在运行的后台命令",
     "Yes, allow this time": "是，仅本次允许",
-    "Messaging subagents isn't supported in remote conversations yet.": "远程对话暂不支持向 Subagent 发送消息。",
-    "Search tabs, files, extensions, subagents, artifacts, commands...": "搜索标签页、文件、扩展、Subagent、构件、命令...",
+    "Messaging subagents isn't supported in remote conversations yet.": "远程对话暂不支持向子 Agent 发送消息。",
+    "Search tabs, files, extensions, subagents, artifacts, commands...": "搜索标签页、文件、扩展、子 Agent、构件、命令...",
     "Kill Terminal": "终止终端",
     "Close Panel": "关闭面板",
     "Copy version details": "复制版本详情",
@@ -4538,6 +4576,50 @@
   };
 
   const REGEX_RULES = [
+    [
+      /^Show\s+(\d+)\s+breakdowns?\.?$/i,
+      (_m, count) => `显示 ${count} 项明细`
+    ],
+    [
+      /^Hide\s+(\d+)\s+breakdowns?\.?$/i,
+      (_m, count) => `隐藏 ${count} 项明细`
+    ],
+    [
+      /^An?\s+(.+?)\s+with\s+the\s+ID\s+[“"'\u201c](.+?)[”"'\u201d]\s+already\s+exists\.?$/i,
+      (_m, entity, id) => {
+        const ent = entity.toLowerCase();
+        const target = ent === 'automation' ? '自动化' : ent === 'scheduled task' ? '计划任务' : entity;
+        return `已存在 ID 为“${id}”的${target}。`;
+      }
+    ],
+    [
+      /^(\d+)\s+on\s+for\s+this\s+conversation$/i,
+      (_m, count) => `当前会话已启用 ${count} 个`
+    ],
+    [
+      /^No\s+connectors\s+match\s+[“"'\u201c](.+?)[”"'\u201d]\.?$/i,
+      (_m, query) => `未找到与“${query}”匹配的连接器`
+    ],
+    [
+      /^No\s+connectors\s+available\s+in\s+this\s+(project|workspace)\.?$/i,
+      (_m, scope) => `此${scope.toLowerCase() === 'project' ? '项目' : '工作区'}中无可用连接器`
+    ],
+    [
+      /^Branch,\s*current:\s*(.+)$/i,
+      (_m, branch) => `分支，当前：${branch}`
+    ],
+    [
+      /^Hi\s+(.+?),\s*what\s+can\s+we\s+get\s+done\s+today\??$/i,
+      (_m, name) => `嗨 ${name}，今天我们要做些什么？`
+    ],
+    [
+      /^What\s+can\s+we\s+get\s+done\s+today\??$/i,
+      '今天我们要做些什么？'
+    ],
+    [
+      /^Card\s+(\d+)\s+of\s+(\d+)$/i,
+      (_m, cur, total) => `第 ${cur} 张，共 ${total} 张`
+    ],
     [
       /^(Enter|Alt\+Enter|\u23ce|\u2325\u23ce)\s+Queues\s+after\s+the\s+turn$/i,
       (_m, key) => `${key} 轮次结束后排队发送`
@@ -4660,6 +4742,23 @@
       '在 $1 中收起'
     ],
     [
+      /^No\s+(.+?)\s+yet\.?$/i,
+      (_m, s) => {
+        const lower = s.toLowerCase();
+        if (lower === 'automations') return '暂无自动化';
+        if (lower === 'scheduled tasks') return '暂无计划任务';
+        return `暂无${s}`;
+      }
+    ],
+    [
+      /^No\s+(.+?)\s+match\s+[“"'\u201c](.+?)[”"'\u201d]\.?$/i,
+      (_m, s, q) => {
+        const lower = s.toLowerCase();
+        const target = lower === 'automations' ? '自动化' : lower === 'scheduled tasks' ? '计划任务' : s;
+        return `未找到与“${q}”匹配的${target}。`;
+      }
+    ],
+    [
       /^No\s+(.+?)\s+configured\.?$/i,
       (_m, s) => `未配置${s.toLowerCase() === 'automations' ? '自动化' : s.toLowerCase() === 'scheduled tasks' ? '计划任务' : s}。`
     ],
@@ -4718,6 +4817,14 @@
     [
       /^Worked for\s+(.+)$/i,
       '已耗时 $1'
+    ],
+    [
+      /^Working\s*[·\u00b7]\s*(.+)$/i,
+      '处理中 · $1'
+    ],
+    [
+      /^Thinking\s*\((.+?)\)[…\.\.\.]*$/i,
+      '思考中 ($1)…'
     ],
     [
       /^(\d+)\s*s\s+ago$/i,
@@ -4827,7 +4934,7 @@
     ],
     [
       /^The breakdown below shows token usage from customizations.+$/is,
-      '下方显示规则、技能与 MCP 等自定义项的 Token 占用。超出预算时，大型规则将降级为路径指针，过大的自定义项将被自动排除。'
+      '下方显示 Rule、Skill 与 MCP 等自定义项的 Token 占用。超出预算时，大型 Rule 将降级为路径指针，过大的自定义项将被自动排除。'
     ],
     [
       /^Inherits your Global Permissions when working in (this project|these conversations)\.?$/i,
@@ -4882,13 +4989,15 @@
     [/^(\d+) files? changed$/i, '$1 个文件已更改'],
  [/^(\d+) agents? running$/i, '$1 个 Agent 运行中'],
  [/^No agents running$/i, '无运行中的 Agent'],
+    [/^(\d+)\s*tasks?\s*running$/i, '$1 个任务运行中'],
+    [/^Show\s+(\d+)\s+more\s+subagents?$/i, '展开另外 $1 个子代理'],
     [/^Last (\d+) days$/i, '最近 $1 天'],
     [/^Conversation (\d+)$/i, '对话 $1'],
     [/^Workspace_(\d+)$/i, '工作区_$1'],
     [/^Handler #(\d+)$/i, '处理器 #$1'],
     [/^Add New Handler to\s+(.+)$/i, '为 $1 添加新处理器'],
     [/^No handlers configured for\s+(.+)$/i, '$1 尚未配置处理器'],
- [/^Child Subagents \((\d+)\)$/i, 'Subagent ($1)'],
+    [/^Child Subagents \((\d+)\)$/i, '子 Agent ($1)'],
     [/^Comments \((\d+)\)$/i, '评论 ($1)'],
     [/^Tool Calls \((\d+)\)$/i, '工具调用 ($1)'],
     [/^Tools \((\d+)\)$/i, '工具 ($1)'],
@@ -5251,6 +5360,41 @@
 
   const ATTR_LIST = ['placeholder', 'title', 'aria-label'];
 
+  function tryTranslateCompoundTextNodes(parent) {
+    if (!parent || parent.children.length > 0) return false;
+    const childNodes = Array.from(parent.childNodes);
+    if (childNodes.length <= 1) return false;
+    if (!childNodes.every((n) => n.nodeType === 3)) return false;
+
+    const origParts = childNodes.map((n) => {
+      const rec = state.nodeMap.get(n);
+      if (rec && rec.translated !== null && n.nodeValue === rec.translated) {
+        return rec.orig;
+      }
+      return n.nodeValue;
+    });
+    const combinedOrig = origParts.join('');
+    if (!combinedOrig.trim()) return false;
+
+    const combinedTranslated = translateText(combinedOrig);
+    if (combinedTranslated) {
+      childNodes.forEach((n, idx) => {
+        let rec = state.nodeMap.get(n);
+        if (!rec) {
+          rec = { orig: origParts[idx], translated: null };
+          state.nodeMap.set(n, rec);
+        }
+        const targetVal = idx === 0 ? combinedTranslated : '';
+        rec.translated = targetVal;
+        state.translatedNodes.add(n);
+        if (n.nodeValue !== targetVal) {
+          n.nodeValue = targetVal;
+        }
+      });
+      return true;
+    }
+    return false;
+  }
   function processTextNode(node) {
     const parent = node.parentElement;
     if (!parent) return;
@@ -5269,6 +5413,9 @@
     if (!currentVal || !currentVal.trim()) return;
 
     if (currentLang === 'zh-CN') {
+      if (tryTranslateCompoundTextNodes(parent)) {
+        return;
+      }
       let record = state.nodeMap.get(node);
       if (record) {
         if (currentVal === record.translated) {
@@ -5280,7 +5427,18 @@
         state.nodeMap.set(node, record);
       }
 
-      const translated = translateText(record.orig);
+      let translated = translateText(record.orig);
+      if (record.orig.trim() === 'New' || record.orig.trim() === 'new') {
+        const isBadge = Boolean(parent.closest && parent.closest('[data-testid*="badge"], .rounded-full'));
+        if (!isBadge) {
+          const actionBtn = Boolean(
+            parent.closest && parent.closest('[data-testid="sidecar-new-button"], button[aria-label*="Add"], button[aria-label*="Create"], button[aria-label*="New"]')
+          );
+          if (actionBtn) {
+            translated = '新建';
+          }
+        }
+      }
       if (translated) {
         if (node.nodeValue !== translated) {
           record.translated = translated;
@@ -5600,6 +5758,17 @@
 
   const NOTIFICATION_MAP = {
     'Agent finished': 'Agent 已完成',
+    'Subagent finished': '子 Agent 已完成',
+    'Task finished': '任务已完成',
+    'Finished': '已完成',
+    'Agent finished.': 'Agent 已完成。',
+    'Subagent finished.': '子 Agent 已完成。',
+    'Task finished.': '任务已完成。',
+    'Finished.': '已完成。',
+    'Agent has finished': 'Agent 已完成',
+    'Agent has finished.': 'Agent 已完成。',
+    'The agent has finished': 'Agent 已完成',
+    'The agent has finished.': 'Agent 已完成。',
     'The agent has questions for you:': 'Agent 提问：',
     'The agent has a question for you:': 'Agent 提问：',
     'Click to respond to the questions.': '点击回复',
@@ -5610,48 +5779,53 @@
   };
 
   function translateNotificationText(text) {
-    if (!text || typeof text !== 'string') return text;
+    if (!text || typeof text !== "string") return text;
     const s = text.trim();
     if (!s) return text;
 
     if (NOTIFICATION_MAP[s]) return NOTIFICATION_MAP[s];
 
-    if (/^Agent finished:\s*/i.test(s)) {
-      const rest = s.replace(/^Agent finished:\s*/i, '').trim();
+    if (/^(?:The\s+)?Agent finished:\s*/i.test(s)) {
+      const rest = s.replace(/^(?:The\s+)?Agent finished:\s*/i, "").trim();
       const titleCache = window.__AGY_TITLE_CACHE__ || {};
       const transRest = titleCache[rest] || translateText(rest) || rest;
       return `Agent 已完成：${transRest}`;
     }
-    if (/^Subagent finished:\s*/i.test(s)) {
-      const rest = s.replace(/^Subagent finished:\s*/i, '').trim();
+    if (/^(?:The\s+)?Subagent finished:\s*/i.test(s)) {
+      const rest = s.replace(/^(?:The\s+)?Subagent finished:\s*/i, "").trim();
       const titleCache = window.__AGY_TITLE_CACHE__ || {};
       const transRest = titleCache[rest] || translateText(rest) || rest;
-      return `Subagent 已完成：${transRest}`;
+      return `子 Agent 已完成：${transRest}`;
     }
-    if (/^Task finished:\s*/i.test(s)) {
-      const rest = s.replace(/^Task finished:\s*/i, '').trim();
+    if (/^(?:The\s+)?Task finished:\s*/i.test(s)) {
+      const rest = s.replace(/^(?:The\s+)?Task finished:\s*/i, "").trim();
       return `任务已完成：${rest}`;
     }
     if (/^Finished:\s*/i.test(s)) {
-      const rest = s.replace(/^Finished:\s*/i, '').trim();
+      const rest = s.replace(/^Finished:\s*/i, "").trim();
       return `已完成：${rest}`;
     }
-    if (/^Agent finished\s*(?:\.|$)/i.test(s)) {
-      return s.endsWith('.') ? 'Agent 已完成。' : 'Agent 已完成';
+    if (/^(?:The\s+)?Agent finished\s*(?:\.|$)/i.test(s)) {
+      return s.endsWith(".") ? "Agent 已完成。" : "Agent 已完成";
     }
-    if (/^Subagent finished\s*(?:\.|$)/i.test(s)) {
-      return s.endsWith('.') ? 'Subagent 已完成。' : 'Subagent 已完成';
+    if (/^(?:The\s+)?Subagent finished\s*(?:\.|$)/i.test(s)) {
+      return s.endsWith(".") ? "子 Agent 已完成。" : "子 Agent 已完成";
     }
-    if (/^Task finished\s*(?:\.|$)/i.test(s)) {
-      return s.endsWith('.') ? '任务已完成。' : '任务已完成';
+    if (/^(?:The\s+)?Task finished\s*(?:\.|$)/i.test(s)) {
+      return s.endsWith(".") ? "任务已完成。" : "任务已完成";
     }
     if (/^Finished\s*(?:\.|$)/i.test(s)) {
-      return s.endsWith('.') ? '已完成。' : '已完成';
+      return s.endsWith(".") ? "已完成。" : "已完成";
     }
     if (/^Agent finished in\s*(.+?)\.?$/i.test(s)) {
       const m = s.match(/^Agent finished in\s*(.+?)\.?$/i);
       const dur = translateDuration(m[1]);
       return `Agent 已完成，耗时 ${dur}`;
+    }
+    if (/^Subagent finished in\s*(.+?)\.?$/i.test(s)) {
+      const m = s.match(/^Subagent finished in\s*(.+?)\.?$/i);
+      const dur = translateDuration(m[1]);
+      return `子 Agent 已完成，耗时 ${dur}`;
     }
 
     return translateText(s) || text;
@@ -5660,14 +5834,53 @@
   window.__AGY_TRANSLATE_NOTIFICATION__ = translateNotificationText;
 
   function hookNotification() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
+    // 1. Hook window.nativeNotifications (Antigravity 专有系统桌面通知 API)
+    function setupNativeNotificationsHook() {
+      try {
+        if (!window.nativeNotifications || typeof window.nativeNotifications.send !== "function") return false;
+        if (window.nativeNotifications.__agySendHooked) return true;
+
+        const origNativeSend = window.nativeNotifications.send;
+        window.nativeNotifications.send = function (options) {
+          const translator = window.__AGY_TRANSLATE_NOTIFICATION__ || translateNotificationText;
+          if (currentLang === "zh-CN" && options && typeof options === "object") {
+            const copy = Object.assign({}, options);
+            if (typeof copy.title === "string") {
+              copy.title = translator(copy.title);
+            }
+            if (typeof copy.body === "string") {
+              copy.body = translator(copy.body);
+            }
+            return origNativeSend.call(this, copy);
+          }
+          return origNativeSend.apply(this, arguments);
+        };
+        window.nativeNotifications.__agySendHooked = true;
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    if (!setupNativeNotificationsHook()) {
+      let tries = 0;
+      const interval = setInterval(() => {
+        tries++;
+        if (setupNativeNotificationsHook() || tries > 60) {
+          clearInterval(interval);
+        }
+      }, 300);
+    }
+
+    // 2. Hook 标准 window.Notification
     let nativeNotif = window.__AGY_REAL_NATIVE_NOTIF__;
     if (!nativeNotif) {
       try {
-        if (typeof document !== 'undefined' && document.body) {
-          const iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
+        if (typeof document !== "undefined" && document.body) {
+          const iframe = document.createElement("iframe");
+          iframe.style.display = "none";
           document.body.appendChild(iframe);
           nativeNotif = iframe.contentWindow.Notification;
           window.__AGY_REAL_NATIVE_NOTIF__ = nativeNotif;
@@ -5679,27 +5892,27 @@
       }
     }
 
-    if (window.Notification && window.Notification.__agyProxyHooked) return;
-
-    try {
-      const proxy = new Proxy(nativeNotif, {
-        construct(target, [title, options]) {
-          const translator = window.__AGY_TRANSLATE_NOTIFICATION__ || translateNotificationText;
-          if (currentLang === 'zh-CN') {
-            const transTitle = translator(title);
-            const transOpts = options && typeof options === 'object' ? Object.assign({}, options) : options;
-            if (transOpts && typeof transOpts.body === 'string') {
-              transOpts.body = translator(transOpts.body);
+    if (window.Notification && !window.Notification.__agyProxyHooked) {
+      try {
+        const proxy = new Proxy(nativeNotif, {
+          construct(target, [title, options]) {
+            const translator = window.__AGY_TRANSLATE_NOTIFICATION__ || translateNotificationText;
+            if (currentLang === "zh-CN") {
+              const transTitle = translator(title);
+              const transOpts = options && typeof options === "object" ? Object.assign({}, options) : options;
+              if (transOpts && typeof transOpts.body === "string") {
+                transOpts.body = translator(transOpts.body);
+              }
+              return Reflect.construct(target, [transTitle, transOpts]);
             }
-            return Reflect.construct(target, [transTitle, transOpts]);
+            return Reflect.construct(target, [title, options]);
           }
-          return Reflect.construct(target, [title, options]);
-        }
-      });
+        });
 
-      proxy.__agyProxyHooked = true;
-      window.Notification = proxy;
-    } catch (_) {}
+        proxy.__agyProxyHooked = true;
+        window.Notification = proxy;
+      } catch (_) {}
+    }
   }
 
   hookNotification();
