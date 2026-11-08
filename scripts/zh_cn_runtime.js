@@ -4859,24 +4859,68 @@
       (m) => m.includes('.') ? ' 菜单）。' : ' 菜单）'
     ],
     [
-      /^Worked for\s+(\d+)\s*s$/i,
-      '已耗时 $1 秒'
+      /^Worked for\s+(\d+)\s*d\s+(\d+)\s*h\s*([›>])?$/i,
+      (m, d, h, a) => `已耗时 ${d} 天 ${h} 小时${a ? ' ' + a : ''}`
     ],
     [
-      /^Worked for\s+(\d+)\s*m$/i,
-      '已耗时 $1 分钟'
+      /^Worked for\s+(\d+)\s*h\s+(\d+)\s*m\s*([›>])?$/i,
+      (m, h, min, a) => `已耗时 ${h} 小时 ${min} 分钟${a ? ' ' + a : ''}`
     ],
     [
-      /^Worked for\s+(\d+)\s*h$/i,
-      '已耗时 $1 小时'
+      /^Worked for\s+(\d+)\s*m\s+(\d+)\s*s\s*([›>])?$/i,
+      (m, min, s, a) => `已耗时 ${min} 分钟 ${s} 秒${a ? ' ' + a : ''}`
     ],
     [
-      /^Worked for\s+(\d+)\s*d$/i,
-      '已耗时 $1 天'
+      /^Worked for\s+(\d+)\s*s\s*([›>])?$/i,
+      (m, s, a) => `已耗时 ${s} 秒${a ? ' ' + a : ''}`
     ],
     [
-      /^Worked for\s+(.+)$/i,
-      '已耗时 $1'
+      /^Worked for\s+(\d+)\s*m\s*([›>])?$/i,
+      (m, min, a) => `已耗时 ${min} 分钟${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Worked for\s+(\d+)\s*h\s*([›>])?$/i,
+      (m, h, a) => `已耗时 ${h} 小时${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Worked for\s+(\d+)\s*d\s*([›>])?$/i,
+      (m, d, a) => `已耗时 ${d} 天${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Worked for\s+(.+?)\s*([›>])?$/i,
+      (m, rest, a) => `已耗时 ${rest}${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thought for\s+(\d+)\s*d\s+(\d+)\s*h\s*([›>])?$/i,
+      (m, d, h, a) => `已思考 ${d} 天 ${h} 小时${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thought for\s+(\d+)\s*h\s+(\d+)\s*m\s*([›>])?$/i,
+      (m, h, min, a) => `已思考 ${h} 小时 ${min} 分钟${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thought for\s+(\d+)\s*m\s+(\d+)\s*s\s*([›>])?$/i,
+      (m, min, s, a) => `已思考 ${min} 分钟 ${s} 秒${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thought for\s+(\d+)\s*s\s*([›>])?$/i,
+      (m, s, a) => `已思考 ${s} 秒${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thought for\s+(\d+)\s*m\s*([›>])?$/i,
+      (m, min, a) => `已思考 ${min} 分钟${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thought for\s+(\d+)\s*h\s*([›>])?$/i,
+      (m, h, a) => `已思考 ${h} 小时${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thought for\s+(\d+)\s*d\s*([›>])?$/i,
+      (m, d, a) => `已思考 ${d} 天${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thought for\s+(.+?)\s*([›>])?$/i,
+      (m, rest, a) => `已思考 ${rest}${a ? ' ' + a : ''}`
     ],
     [
       /^Working\s*[·\u00b7]\s*(.+)$/i,
@@ -5365,7 +5409,6 @@
     '[data-testid="user-message-bubble"]',
     '[data-testid="user-message-media-scroll"]',
     '[data-testid="user-message-content"]',
-    '[data-quotable="true"]',
     '#agy-zh-cn-toggle-bar',
     '[translate="no"]',
     '.notranslate',
