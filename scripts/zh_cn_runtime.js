@@ -233,7 +233,7 @@
     "Download Location": "下载保存位置",
     "Cancel download": "取消下载",
     "Background tasks and terminals agents left running, across all conversations.": "跨所有会话由 Agent 保持运行的后台任务与终端。",
-    "Conversation Unarchived": "会话已取消归档",
+    "Conversation Unarchived": "对话已取消归档",
     "Conversation limit reached": "已达会话上限",
     "Daily conversation limit reached": "已达每日会话上限",
     "Daily environment time used": "已用每日环境时长",
@@ -1602,6 +1602,16 @@
     "Restore Conversation": "恢复对话",
     "Archive This Conversation": "归档此对话",
     "Conversation Archived": "对话已归档",
+    "Project archived": "项目已归档",
+    "Project Archived": "项目已归档",
+    "Workspace archived": "工作区已归档",
+    "Workspace Archived": "工作区已归档",
+    "Failed to archive project": "归档项目失败",
+    "Failed to archive workspace": "归档工作区失败",
+    "Failed to archive conversation": "归档对话失败",
+    "Failed to unarchive project": "取消归档项目失败",
+    "Failed to unarchive workspace": "取消归档工作区失败",
+    "Failed to unarchive conversation": "取消归档对话失败",
     "Conversation unavailable": "对话不可用",
     "Conversation turns": "对话轮次",
     "Conversation navigator off": "对话导航器已关闭",
@@ -4607,6 +4617,14 @@
 
   const REGEX_RULES = [
     [
+      /^Failed to (archive|unarchive)\s+(project|workspace|conversation)(?::\s*(.+))?$/i,
+      (_m, action, target, rest) => {
+        const act = action.toLowerCase() === 'archive' ? '归档' : '取消归档';
+        const tgt = target.toLowerCase() === 'project' ? '项目' : (target.toLowerCase() === 'workspace' ? '工作区' : '对话');
+        return rest ? `${act}${tgt}失败：${rest}` : `${act}${tgt}失败`;
+      }
+    ],
+    [
       /^Modified\s+in\s+(.+)$/i,
       (_m, target) => `已在 ${target} 中修改`
     ],
@@ -5387,6 +5405,15 @@
     );
   }
 
+  function isToastOrNotificationElement(el) {
+    if (!el || typeof el.closest !== 'function') return false;
+    return Boolean(
+      el.closest(
+        '[data-testid="toast-notification"], [data-notification-tag], [data-testid="nux-card"], [data-testid*="banner"], [data-testid*="announcement"], [role="status"], [role="alert"], .toast-viewport, [class*="toast-viewport"]'
+      )
+    );
+  }
+
   function shouldSkipElement(el) {
     if (!el || el.nodeType !== 1) return true;
     if (SKIP_TAGS.has(el.tagName)) return true;
@@ -5398,18 +5425,8 @@
     ) {
       return true;
     }
-    if (el.hasAttribute('data-markdown-root')) {
-      return true;
-    }
-    if (el.closest && el.closest(SKIP_CLOSEST_SELECTOR)) {
-      return true;
-    }
-    const isToastOrNotification = Boolean(
-      el.closest &&
-      el.closest(
-        '[data-testid="toast-notification"], [data-notification-tag], [data-testid="nux-card"], [data-testid*="banner"], [data-testid*="announcement"], [role="status"], [role="alert"]'
-      )
-    );
+
+    const isToastOrNotification = isToastOrNotificationElement(el);
     if (isToastOrNotification) {
       if (el.closest('pre, code, .monaco-editor, .xterm, .katex, #agy-zh-cn-toggle-bar')) {
         return true;
@@ -5418,6 +5435,13 @@
         return true;
       }
       return false;
+    }
+
+    if (el.hasAttribute('data-markdown-root')) {
+      return true;
+    }
+    if (el.closest && el.closest(SKIP_CLOSEST_SELECTOR)) {
+      return true;
     }
     if (isIconElement(el)) {
       return true;
@@ -5604,6 +5628,16 @@
       {
         acceptNode(node) {
           if (node.nodeType === 1) {
+            const inToast = isToastOrNotificationElement(node);
+            if (inToast) {
+              if (node.closest('pre, code, .monaco-editor, .xterm, .katex, #agy-zh-cn-toggle-bar')) {
+                return NodeFilter.FILTER_REJECT;
+              }
+              if (isIconElement(node)) {
+                return NodeFilter.FILTER_SKIP;
+              }
+              return NodeFilter.FILTER_ACCEPT;
+            }
             if (node.closest && node.closest(SKIP_CLOSEST_SELECTOR)) {
               return NodeFilter.FILTER_REJECT;
             }
