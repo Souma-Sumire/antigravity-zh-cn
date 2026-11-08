@@ -5363,8 +5363,9 @@
     '[contenteditable="true"]',
     '[data-markdown-root]',
     '[data-testid="user-message-bubble"]',
-    '[data-testid="user-input-step"]',
-    '[aria-label="User message"]',
+    '[data-testid="user-message-media-scroll"]',
+    '[data-testid="user-message-content"]',
+    '[data-quotable="true"]',
     '#agy-zh-cn-toggle-bar',
     '[translate="no"]',
     '.notranslate',
@@ -5414,6 +5415,13 @@
     );
   }
 
+  function isActionToolbarElement(el) {
+    if (!el || typeof el.closest !== 'function') return false;
+    return Boolean(
+      el.closest('[data-testid="user-message-actions"], [data-testid="cascade-system-message-toolbar"]')
+    );
+  }
+
   function shouldSkipElement(el) {
     if (!el || el.nodeType !== 1) return true;
     if (SKIP_TAGS.has(el.tagName)) return true;
@@ -5431,6 +5439,14 @@
       if (el.closest('pre, code, .monaco-editor, .xterm, .katex, #agy-zh-cn-toggle-bar')) {
         return true;
       }
+      if (isIconElement(el)) {
+        return true;
+      }
+      return false;
+    }
+
+    const isActionToolbar = isActionToolbarElement(el);
+    if (isActionToolbar) {
       if (isIconElement(el)) {
         return true;
       }
@@ -5629,7 +5645,8 @@
         acceptNode(node) {
           if (node.nodeType === 1) {
             const inToast = isToastOrNotificationElement(node);
-            if (inToast) {
+            const inToolbar = isActionToolbarElement(node);
+            if (inToast || inToolbar) {
               if (node.closest('pre, code, .monaco-editor, .xterm, .katex, #agy-zh-cn-toggle-bar')) {
                 return NodeFilter.FILTER_REJECT;
               }
