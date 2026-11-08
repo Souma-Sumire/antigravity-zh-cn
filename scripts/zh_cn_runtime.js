@@ -2362,6 +2362,68 @@
     "analyzed directory": "分析目录",
     "Analyzed": "已分析",
     "analyzed": "已分析",
+    "Analyzing": "正在分析",
+    "analyzing": "正在分析",
+    "Edited": "已编辑",
+    "edited": "已编辑",
+    "Editing": "正在编辑",
+    "editing": "正在编辑",
+    "Created": "已创建",
+    "created": "已创建",
+    "Creating": "正在创建",
+    "creating": "正在创建",
+    "Deleted": "已删除",
+    "deleted": "已删除",
+    "Deleting": "正在删除",
+    "deleting": "正在删除",
+    "Reading": "正在读取",
+    "reading": "正在读取",
+    "Read": "已读取",
+    "read": "已读取",
+    "Viewing": "正在查看",
+    "viewing": "正在查看",
+    "Viewed": "已查看",
+    "viewed": "已查看",
+    "Listing": "正在列出",
+    "listing": "正在列出",
+    "Listed": "已列出",
+    "listed": "已列出",
+    "Searching": "正在搜索",
+    "searching": "正在搜索",
+    "Searched": "已搜索",
+    "searched": "已搜索",
+    "Explored": "已探索",
+    "explored": "已探索",
+    "Exploring": "正在探索",
+    "exploring": "正在探索",
+    "Working": "工作中",
+    "working": "工作中",
+    "Thinking": "思考中",
+    "thinking": "思考中",
+    "Done": "已完成",
+    "done": "已完成",
+    "Bookmarked": "已添加书签",
+    "bookmarked": "已添加书签",
+    "Bookmarking": "正在添加书签",
+    "bookmarking": "正在添加书签",
+    "Removed bookmark": "已移除书签",
+    "Removing bookmark": "正在移除书签",
+    "Canceled bookmark of": "已取消添加书签",
+    "Canceled removal of bookmark": "已取消移除书签",
+    "Canceled edit to": "已取消编辑",
+    "Canceled creation of": "已取消创建",
+    "Canceled deletion of": "已取消删除",
+    "Failed to edit": "编辑失败",
+    "Failed to read": "读取失败",
+    "Failed to create": "创建失败",
+    "Failed to delete": "删除失败",
+    "Failed to execute": "执行失败",
+    "Running command": "正在执行命令",
+    "Ran command": "已执行命令",
+    "Used MCP tool": "已使用 MCP 工具",
+    "Used tool": "已使用工具",
+    "Generated image": "已生成图像",
+    "Cancel Step": "取消步骤",
     "Searching the web": "搜索网页",
     "Editing file": "正在编辑文件",
     "Viewing file": "查看文件",
@@ -4617,6 +4679,62 @@
 
   const REGEX_RULES = [
     [
+      /^(?:Ran|ran)\s+(\d+)\s+commands?$/i,
+      (_m, count) => `已执行 ${count} 个命令`
+    ],
+    [
+      /^Reading\s+(.+)$/i,
+      (_m, target) => `正在读取 ${target}`
+    ],
+    [
+      /^Editing\s+(.+)$/i,
+      (_m, target) => `正在编辑 ${target}`
+    ],
+    [
+      /^Listing\s+(.+)$/i,
+      (_m, target) => `正在列出 ${target}`
+    ],
+    [
+      /^Searching\s+(.+)$/i,
+      (_m, target) => `正在搜索 ${target}`
+    ],
+    [
+      /^Explored\s+(.+)$/i,
+      (_m, target) => `已探索 ${target}`
+    ],
+    [
+      /^(?:Edited|edited)\s+(.+)$/i,
+      (_m, target) => `已编辑 ${target}`
+    ],
+    [
+      /^(?:Created|created)\s+(.+)$/i,
+      (_m, target) => `已创建 ${target}`
+    ],
+    [
+      /^(?:Deleted|deleted)\s+(.+)$/i,
+      (_m, target) => `已删除 ${target}`
+    ],
+    [
+      /^Viewed\s+(.+)$/i,
+      (_m, target) => `已查看 ${target}`
+    ],
+    [
+      /^Ran command:\s*(.+)$/i,
+      (_m, cmd) => `已执行命令：${cmd}`
+    ],
+    [
+      /^Used MCP tool:\s*(.+)$/i,
+      (_m, tool) => `已使用 MCP 工具：${tool}`
+    ],
+    [
+      /^Used tool:\s*(.+)$/i,
+      (_m, tool) => `已使用工具：${tool}`
+    ],
+    [
+      /^Generated image:\s*(.+)$/i,
+      (_m, prompt) => `已生成图像：${prompt}`
+    ],
+    [
       /^Failed to (archive|unarchive)\s+(project|workspace|conversation)(?::\s*(.+))?$/i,
       (_m, action, target, rest) => {
         const act = action.toLowerCase() === 'archive' ? '归档' : '取消归档';
@@ -5291,6 +5409,28 @@
     return {};
   }
 
+  function translateActionSegment(seg) {
+    seg = seg.trim();
+    let m;
+    if ((m = seg.match(/^(?:Ran|ran)\s+(\d+)\s+commands?$/i))) return `已执行 ${m[1]} 个命令`;
+    if (/^(?:Ran|ran)\s+commands?$/i.test(seg)) return '已执行命令';
+    if ((m = seg.match(/^Explored\s+(.+)$/i))) {
+      const t = m[1].toLowerCase() === 'files' ? '文件' : m[1];
+      return `已探索 ${t}`;
+    }
+    if (/^Explored$/i.test(seg)) return '已探索';
+    if ((m = seg.match(/^(?:Edited|edited)\s+(.+)$/i))) {
+      const t = m[1].toLowerCase() === 'files' ? '文件' : (m[1].toLowerCase() === 'artifacts' ? '工件' : m[1]);
+      return `已编辑 ${t}`;
+    }
+    if (/^(?:Edited|edited)$/i.test(seg)) return '已编辑';
+    if ((m = seg.match(/^(?:Created|created)\s+(.+)$/i))) return `已创建 ${m[1]}`;
+    if (/^(?:Created|created)$/i.test(seg)) return '已创建';
+    if ((m = seg.match(/^(?:Deleted|deleted)\s+(.+)$/i))) return `已删除 ${m[1]}`;
+    if (/^(?:Deleted|deleted)$/i.test(seg)) return '已删除';
+    return null;
+  }
+
   function formatPangu(text) {
     if (!text || typeof text !== 'string') return text;
     if (!/[\u4e00-\u9fa5]/.test(text) || !/[a-zA-Z0-9]/.test(text)) {
@@ -5456,6 +5596,26 @@
     if (resetsInMatch) {
       const dur = translateDuration(resetsInMatch[1]);
       return str.replace(trimmed, `将于 ${dur}后重置`);
+    }
+
+    if (normalizedKey.includes(',') && !normalizedKey.startsWith('http') && !normalizedKey.includes('\n')) {
+      const parts = normalizedKey.split(/\s*,\s*/);
+      if (parts.length >= 2) {
+        let allMatched = true;
+        const translatedParts = [];
+        for (const part of parts) {
+          const t = translateActionSegment(part);
+          if (t) {
+            translatedParts.push(t);
+          } else {
+            allMatched = false;
+            break;
+          }
+        }
+        if (allMatched) {
+          return str.replace(trimmed, translatedParts.join('、'));
+        }
+      }
     }
 
     for (let i = 0; i < REGEX_RULES.length; i++) {
