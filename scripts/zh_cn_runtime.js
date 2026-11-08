@@ -4923,6 +4923,98 @@
       (m, rest, a) => `已思考 ${rest}${a ? ' ' + a : ''}`
     ],
     [
+      /^Worked for$/i,
+      '已耗时'
+    ],
+    [
+      /^Thought for$/i,
+      '已思考'
+    ],
+    [
+      /^Thinking for\s+(\d+)\s*d\s+(\d+)\s*h\s*([›>])?$/i,
+      (m, d, h, a) => `思考中 ${d} 天 ${h} 小时${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thinking for\s+(\d+)\s*h\s+(\d+)\s*m\s*([›>])?$/i,
+      (m, h, min, a) => `思考中 ${h} 小时 ${min} 分钟${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thinking for\s+(\d+)\s*m\s+(\d+)\s*s\s*([›>])?$/i,
+      (m, min, s, a) => `思考中 ${min} 分钟 ${s} 秒${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thinking for\s+(\d+)\s*s\s*([›>])?$/i,
+      (m, s, a) => `思考中 ${s} 秒${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thinking for\s+(\d+)\s*m\s*([›>])?$/i,
+      (m, min, a) => `思考中 ${min} 分钟${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thinking for\s+(\d+)\s*h\s*([›>])?$/i,
+      (m, h, a) => `思考中 ${h} 小时${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thinking for\s+(\d+)\s*d\s*([›>])?$/i,
+      (m, d, a) => `思考中 ${d} 天${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thinking for\s+(.+?)\s*([›>])?$/i,
+      (m, rest, a) => `思考中 ${rest}${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Thinking for$/i,
+      '思考中'
+    ],
+    [
+      /^Running for\s+(\d+)\s*d\s+(\d+)\s*h\s*([›>])?$/i,
+      (m, d, h, a) => `已运行 ${d} 天 ${h} 小时${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Running for\s+(\d+)\s*h\s+(\d+)\s*m\s*([›>])?$/i,
+      (m, h, min, a) => `已运行 ${h} 小时 ${min} 分钟${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Running for\s+(\d+)\s*m\s+(\d+)\s*s\s*([›>])?$/i,
+      (m, min, s, a) => `已运行 ${min} 分钟 ${s} 秒${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Running for\s+(\d+)\s*s\s*([›>])?$/i,
+      (m, s, a) => `已运行 ${s} 秒${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Running for\s+(\d+)\s*m\s*([›>])?$/i,
+      (m, min, a) => `已运行 ${min} 分钟${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Running for\s+(\d+)\s*h\s*([›>])?$/i,
+      (m, h, a) => `已运行 ${h} 小时${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Running for\s+(\d+)\s*d\s*([›>])?$/i,
+      (m, d, a) => `已运行 ${d} 天${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Running for\s+(.+?)\s*([›>])?$/i,
+      (m, rest, a) => `已运行 ${rest}${a ? ' ' + a : ''}`
+    ],
+    [
+      /^Running for$/i,
+      '已运行'
+    ],
+    [
+      /^Waiting for command completion\s*\(up to\s+(\d+)\s*s\)$/i,
+      '等待命令执行完成（最长 $1 秒）'
+    ],
+    [
+      /^Searched for files:\s*(.+)$/i,
+      '已搜索文件: $1'
+    ],
+    [
+      /^Searched for\s+"(.+)"$/i,
+      '已搜索 "$1"'
+    ],
+    [
       /^Working\s*[·\u00b7]\s*(.+)$/i,
       '处理中 · $1'
     ],
@@ -5578,6 +5670,15 @@
       }
 
       let translated = translateText(record.orig);
+      if (!translated && record.orig.trim() === 's' && parent) {
+        const hasSlot = Boolean(parent.querySelector && parent.querySelector('[data-slot]'));
+        if (hasSlot) {
+          const text = parent.textContent || '';
+          if (/思考中|已思考|已耗时|已运行/i.test(text)) {
+            translated = ' 秒';
+          }
+        }
+      }
       if (record.orig.trim() === 'New' || record.orig.trim() === 'new') {
         const isBadge = Boolean(parent.closest && parent.closest('[data-testid*="badge"], .rounded-full'));
         if (!isBadge) {
