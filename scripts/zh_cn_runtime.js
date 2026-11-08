@@ -5324,8 +5324,45 @@
     '[data-testid="user-message-bubble"]',
     '[data-testid="user-input-step"]',
     '[aria-label="User message"]',
-    '#agy-zh-cn-toggle-bar'
+    '#agy-zh-cn-toggle-bar',
+    '[translate="no"]',
+    '.notranslate',
+    '.no-translate',
+    '[data-no-translate]',
+    '[data-no-i18n]',
+    '[data-plugin]',
+    '[data-plugin-id]',
+    '[data-extension-id]',
+    '[data-custom-plugin]',
+    '[data-external-plugin]',
+    '.agy-external-plugin',
+    '#agy-account-manager-btn',
+    '#agy-account-manager-popover',
+    '#agy-account-confirm-modal',
+    '#agy-account-switch-mask',
+    '[id^="agy-account-"]',
+    '[class*="agy-account-"]',
+    '[id*="account-manager"]',
+    '[class*="account-manager"]'
   ].join(', ');
+
+  function isIconElement(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.hasAttribute('data-icon')) return true;
+    const cl = el.classList;
+    if (!cl) return false;
+    return (
+      cl.contains('material-symbols-outlined') ||
+      cl.contains('material-symbols-rounded') ||
+      cl.contains('material-symbols-sharp') ||
+      cl.contains('material-symbols') ||
+      cl.contains('material-icons') ||
+      cl.contains('material-icons-outlined') ||
+      cl.contains('material-icons-round') ||
+      cl.contains('material-icons-sharp') ||
+      cl.contains('codicon')
+    );
+  }
 
   function shouldSkipElement(el) {
     if (!el || el.nodeType !== 1) return true;
@@ -5338,6 +5375,12 @@
     ) {
       return true;
     }
+    if (el.hasAttribute('data-markdown-root')) {
+      return true;
+    }
+    if (el.closest && el.closest(SKIP_CLOSEST_SELECTOR)) {
+      return true;
+    }
     const isToastOrNotification = Boolean(
       el.closest &&
       el.closest(
@@ -5348,32 +5391,12 @@
       if (el.closest('pre, code, .monaco-editor, .xterm, .katex, #agy-zh-cn-toggle-bar')) {
         return true;
       }
-      const cls = typeof el.className === 'string' ? el.className : '';
-      if (
-        cls.includes('material-symbols') ||
-        cls.includes('material-icons') ||
-        cls.includes('codicon') ||
-        el.getAttribute('data-icon') !== null ||
-        el.getAttribute('translate') === 'no'
-      ) {
+      if (isIconElement(el)) {
         return true;
       }
       return false;
     }
-    if (el.hasAttribute('data-markdown-root')) {
-      return true;
-    }
-    if (el.closest && el.closest(SKIP_CLOSEST_SELECTOR)) {
-      return true;
-    }
-    const cls = typeof el.className === 'string' ? el.className : '';
-    if (
-      cls.includes('material-symbols') ||
-      cls.includes('material-icons') ||
-      cls.includes('codicon') ||
-      el.getAttribute('data-icon') !== null ||
-      el.getAttribute('translate') === 'no'
-    ) {
+    if (isIconElement(el)) {
       return true;
     }
     return false;
@@ -5499,6 +5522,7 @@
 
   function processAttributes(el) {
     if (!el || el.nodeType !== 1 || el.id === 'agy-zh-cn-toggle-bar') return;
+    if (shouldSkipElement(el)) return;
     for (let i = 0; i < ATTR_LIST.length; i++) {
       const attr = ATTR_LIST[i];
       const val = el.getAttribute(attr);
@@ -5547,14 +5571,30 @@
     }
     if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
     if (root.nodeType === 1) {
-      processAttributes(root);
       if (shouldSkipElement(root)) return;
+      processAttributes(root);
     }
 
     const walker = document.createTreeWalker(
       root,
       NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
-      null
+      {
+        acceptNode(node) {
+          if (node.nodeType === 1) {
+            if (node.closest && node.closest(SKIP_CLOSEST_SELECTOR)) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            if (shouldSkipElement(node)) {
+              return NodeFilter.FILTER_SKIP;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          }
+          if (node.nodeType === 3) {
+            return NodeFilter.FILTER_ACCEPT;
+          }
+          return NodeFilter.FILTER_SKIP;
+        }
+      }
     );
 
     let curr = walker.nextNode();
