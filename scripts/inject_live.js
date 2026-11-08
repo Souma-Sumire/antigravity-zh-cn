@@ -62,13 +62,16 @@ function evalInTarget(wsUrl, expression) {
     };
 
     ws.onmessage = (event) => {
-      clearTimeout(timer);
       try {
         const data = JSON.parse(String(event.data));
-        ws.close();
-        resolve(data);
+        if (data && data.id === 1) {
+          clearTimeout(timer);
+          try { ws.close(); } catch (_) {}
+          resolve(data);
+        }
       } catch (e) {
-        ws.close();
+        clearTimeout(timer);
+        try { ws.close(); } catch (_) {}
         reject(e);
       }
     };

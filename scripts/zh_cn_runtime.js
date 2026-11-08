@@ -6102,7 +6102,7 @@
   }
 
   window.__AGY_I18N__ = {
-    version: '1.2.0',
+    version: '1.2.1',
     getLanguage: () => currentLang,
     setLanguage,
     toggle: () => setLanguage(currentLang === 'zh-CN' ? 'en-US' : 'zh-CN'),

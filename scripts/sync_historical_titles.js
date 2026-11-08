@@ -9,6 +9,10 @@ function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function escapePbtxtString(str) {
+  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 function getSqliteModule() {
   try {
     return require('node:sqlite');
@@ -18,6 +22,16 @@ function getSqliteModule() {
 }
 
 async function syncHistoricalTitles() {
+  if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION !== '1') {
+    return {
+      success: true,
+      count: 0,
+      items: [],
+      skipped: true,
+      reason: '会话标题翻译与本地数据同步默认已关闭（保护用户隐私与数据安全）。如需开启，请显式设置环境变量 AGY_ENABLE_REMOTE_TITLE_TRANSLATION=1'
+    };
+  }
+
   const root = path.join(os.homedir(), '.gemini', 'antigravity');
   const annotationsDir = path.join(root, 'annotations');
   const dbPath = path.join(root, 'conversation_summaries.db');
@@ -61,9 +75,10 @@ async function syncHistoricalTitles() {
             titlesToTranslate.add(orig);
             pendingFtsRows.push({ conversation_id: r.conversation_id, title: orig });
 
-            // 若主表中该会话 title 为空，同步加入主表更新列表
+            // 若主表中该会话存在但 title 为空，同步加入主表更新列表
+            const hasInSummary = existingSummaryMap.has(r.conversation_id);
             const sumTitle = existingSummaryMap.get(r.conversation_id);
-            if (!sumTitle && sumTitle !== undefined) {
+            if (hasInSummary && !sumTitle) {
               pendingDbRows.push({ conversation_id: r.conversation_id, title: orig });
             }
           }
@@ -109,13 +124,10 @@ async function syncHistoricalTitles() {
 
   // 4. 写回 SQLite 数据库（主表及 FTS 表）
   if (sqlite && (pendingDbRows.length > 0 || pendingFtsRows.length > 0) && fs.existsSync(dbPath)) {
+    let db = null;
+    let inTx = false;
     try {
-      const bakPath = dbPath + '.bak';
-      if (!fs.existsSync(bakPath)) {
-        fs.copyFileSync(dbPath, bakPath);
-      }
-
-      const db = new sqlite.DatabaseSync(dbPath);
+      db = new sqlite.DatabaseSync(dbPath);
       const updateSumStmt = db.prepare('UPDATE conversation_summaries SET title = ? WHERE conversation_id = ?');
 
       let updateFtsStmt = null;
@@ -124,6 +136,7 @@ async function syncHistoricalTitles() {
       } catch (_) {}
 
       db.exec('BEGIN TRANSACTION');
+      inTx = true;
 
       for (const row of pendingDbRows) {
         const trans = transMap[row.title];
@@ -164,8 +177,16 @@ async function syncHistoricalTitles() {
       }
 
       db.exec('COMMIT');
-      db.close();
-    } catch (_) {}
+      inTx = false;
+    } catch (err) {
+      if (db && inTx) {
+        try { db.exec('ROLLBACK'); } catch (_) {}
+      }
+    } finally {
+      if (db) {
+        try { db.close(); } catch (_) {}
+      }
+    }
   }
 
   // 5. 写回 annotations/*.pbtxt 文件
@@ -175,14 +196,10 @@ async function syncHistoricalTitles() {
     if (!translatedTitle || translatedTitle === originalTitle) continue;
 
     try {
-      const bakPath = fullPath + '.bak';
-      if (!fs.existsSync(bakPath)) {
-        fs.writeFileSync(bakPath, content, 'utf8');
-      }
-
       const titleRegex = new RegExp(`title:\\s*"${escapeRegExp(originalTitle)}"`);
       if (titleRegex.test(content)) {
-        const newContent = content.replace(titleRegex, () => `title: "${translatedTitle}"`);
+        const escaped = escapePbtxtString(translatedTitle);
+        const newContent = content.replace(titleRegex, () => `title: "${escaped}"`);
         if (newContent !== content) {
           fs.writeFileSync(fullPath, newContent, 'utf8');
           const key = `${file}:${originalTitle}`;
@@ -219,8 +236,97 @@ async function syncHistoricalTitles() {
   };
 }
 
+// 卸载时按备份清单精准回滚用户数据，不碰用户新增会话
+async function revertHistoricalTitles() {
+  const root = path.join(os.homedir(), '.gemini', 'antigravity');
+  const manifestPath = path.join(root, 'historical_titles_backup.json');
+  if (!fs.existsSync(manifestPath)) {
+    return { restored: 0, items: [] };
+  }
+
+  let manifest = [];
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch (_) {
+    return { restored: 0, items: [] };
+  }
+
+  if (!Array.isArray(manifest) || manifest.length === 0) {
+    try { fs.unlinkSync(manifestPath); } catch (_) {}
+    return { restored: 0, items: [] };
+  }
+
+  const sqlite = getSqliteModule();
+  const dbPath = path.join(root, 'conversation_summaries.db');
+  let restoredCount = 0;
+
+  if (sqlite && fs.existsSync(dbPath)) {
+    let db = null;
+    let inTx = false;
+    try {
+      db = new sqlite.DatabaseSync(dbPath);
+      const updateSum = db.prepare('UPDATE conversation_summaries SET title = ? WHERE conversation_id = ? AND title = ?');
+      let updateFts = null;
+      try {
+        updateFts = db.prepare('UPDATE conversations_fts SET title = ? WHERE conversation_id = ? AND title = ?');
+      } catch (_) {}
+
+      db.exec('BEGIN TRANSACTION');
+      inTx = true;
+
+      for (const item of manifest) {
+        if (item.type === 'db' && item.id && item.original && item.translated) {
+          try {
+            updateSum.run(item.original, item.id, item.translated);
+            restoredCount++;
+          } catch (_) {}
+        } else if (item.type === 'fts' && item.id && item.original && item.translated && updateFts) {
+          try {
+            updateFts.run(item.original, item.id, item.translated);
+            restoredCount++;
+          } catch (_) {}
+        }
+      }
+
+      db.exec('COMMIT');
+      inTx = false;
+    } catch (_) {
+      if (db && inTx) {
+        try { db.exec('ROLLBACK'); } catch (_) {}
+      }
+    } finally {
+      if (db) {
+        try { db.close(); } catch (_) {}
+      }
+    }
+  }
+
+  const annotationsDir = path.join(root, 'annotations');
+  for (const item of manifest) {
+    if (item.type === 'pbtxt' && item.file && item.original && item.translated) {
+      const fullPath = path.join(annotationsDir, item.file);
+      if (fs.existsSync(fullPath)) {
+        try {
+          const content = fs.readFileSync(fullPath, 'utf8');
+          const transRegex = new RegExp(`title:\\s*"${escapeRegExp(escapePbtxtString(item.translated))}"`);
+          if (transRegex.test(content)) {
+            const reverted = content.replace(transRegex, () => `title: "${escapePbtxtString(item.original)}"`);
+            fs.writeFileSync(fullPath, reverted, 'utf8');
+            restoredCount++;
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  try { fs.unlinkSync(manifestPath); } catch (_) {}
+
+  return { restored: restoredCount, items: manifest };
+}
+
 module.exports = {
-  syncHistoricalTitles
+  syncHistoricalTitles,
+  revertHistoricalTitles
 };
 
 if (require.main === module) {

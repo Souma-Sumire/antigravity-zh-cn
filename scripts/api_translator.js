@@ -35,6 +35,14 @@ function formatPangu(text) {
     .trim();
 }
 
+function isRemoteTranslateEnabled() {
+  return (
+    process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1' &&
+    process.env.AGY_DISABLE_REMOTE_TRANSLATE !== '1' &&
+    process.env.AGY_OFFLINE !== '1'
+  );
+}
+
 function getProxyConfig() {
   const envProxy =
     process.env.HTTPS_PROXY ||
@@ -57,7 +65,7 @@ function getProxyConfig() {
       return {
         protocol: url.protocol,
         host: url.hostname || '127.0.0.1',
-        port: parseInt(url.port, 10) || 7890
+        port: parseInt(url.port, 10) || 7897
       };
     } catch (_) {}
   }
@@ -399,7 +407,7 @@ async function translateWithApi(text) {
   if (!text || typeof text !== 'string') return text;
   const raw = text.trim();
   if (!raw) return raw;
-  if (process.env.AGY_DISABLE_REMOTE_TRANSLATE === '1' || process.env.AGY_OFFLINE === '1') {
+  if (!isRemoteTranslateEnabled()) {
     return raw;
   }
 
@@ -481,7 +489,7 @@ function getCachedTranslation(text) {
 
 async function translateBatchWithApi(texts) {
   if (!Array.isArray(texts) || texts.length === 0) return {};
-  if (process.env.AGY_DISABLE_REMOTE_TRANSLATE === '1' || process.env.AGY_OFFLINE === '1') {
+  if (!isRemoteTranslateEnabled()) {
     const directMap = {};
     for (const t of texts) directMap[t] = t;
     return directMap;
@@ -546,5 +554,6 @@ module.exports = {
   formatPangu,
   getProxyConfig,
   requestMicrosoftTranslate,
-  requestGoogleTranslate
+  requestGoogleTranslate,
+  isRemoteTranslateEnabled
 };

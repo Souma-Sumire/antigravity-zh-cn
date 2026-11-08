@@ -235,8 +235,21 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     }
     const agentMatch = clean.match(/^(\d+)\s+agents?\s+running$/i);
  if (agentMatch) return `${agentMatch[1]} 个 Agent 运行中`;
-    const openMatch = clean.match(/^Open\s+(.+)$/i);
-    if (openMatch && !MENU_MAP[clean]) return `打开 ${openMatch[1]}`;
+    const openMatch = clean.match(/^Open\s+(File|Folder|Workspace|Recent|Settings|Terminal|Output|Window)\b(.*)$/i);
+    if (openMatch && !MENU_MAP[clean]) {
+      const targetWord = openMatch[1].toLowerCase();
+      const wordMap = {
+        file: '文件',
+        folder: '文件夹',
+        workspace: '工作区',
+        recent: '最近项',
+        settings: '设置',
+        terminal: '终端',
+        output: '输出',
+        window: '窗口'
+      };
+      return '打开' + (wordMap[targetWord] || openMatch[1]) + (openMatch[2] || '');
+    }
     return null;
   }
 
@@ -244,14 +257,20 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     if (!menuInstance || !Array.isArray(menuInstance.items)) return menuInstance;
     for (const item of menuInstance.items) {
       if (item && item.id === 'running-agents' && !item.__agyMutableLabelAttached) {
-        let currentLabel = item.label || 'No agents running';
+        const translateAgentLabel = (lbl) => {
+          if (!lbl || typeof lbl !== 'string') return lbl;
+          const trimmed = lbl.trim();
+          return translateLabel(trimmed) || MENU_MAP[trimmed] || lbl;
+        };
+
+        let currentLabel = translateAgentLabel(item.label || 'No agents running');
         try {
           Object.defineProperty(item, 'label', {
             get() {
               return currentLabel;
             },
             set(val) {
-              currentLabel = val;
+              currentLabel = translateAgentLabel(val);
             },
             configurable: true,
             enumerable: true
@@ -448,16 +467,16 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       return s.endsWith('.') ? '已完成。' : '已完成';
     }
     if (s.includes('has a question') || s.includes('has questions')) {
-      return 'Agent 提问：';
+      return text.replace(/\bhas a questions?\b:?/i, '提出了疑问：').replace(/\bhas questions?\b:?/i, '提出了疑问：');
     }
-    if (s.startsWith('Requesting your permission:') || s === 'Requesting your permission') {
-      return '请求权限：';
+    if (/^Requesting your permission:?\s*/i.test(s)) {
+      return text.replace(/^Requesting your permission:?\s*/i, '请求权限：');
     }
     if (s === 'Action requires your attention') {
       return '需要确认';
     }
     if (s.includes('Click to respond')) {
-      return '点击回复';
+      return text.replace(/\bClick to respond\b/gi, '点击回复');
     }
     if (s === 'The agent is waiting for your input.') {
       return 'Agent 等待输入';
@@ -514,6 +533,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     electron.ipcMain.__agyTitleApiBridgeRegistered = true;
     const callTimes = [];
     electron.ipcMain.handle('agy-translate-title', async (event, text) => {
+      if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION !== '1') return text;
       const senderUrl = event?.senderFrame?.url || '';
       const isInternal =
         senderUrl.startsWith('file://') ||
@@ -567,59 +587,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   getRuntimeScript();
 
   // 仅当检测到 pending 目录存在已下载的更新安装包、即将执行退出更新时，才派生一次性 60 秒短生命周期修补任务，平时零后台进程
-  let postUpdateScheduled = false;
-  function scheduleOneShotPostUpdatePatchIfPending() {
-    if (postUpdateScheduled) return;
-    try {
-      const pendingDir = path.join(
-        process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
-        'antigravity-updater',
-        'pending'
-      );
-      if (!fs.existsSync(pendingDir)) return;
-      const files = fs.readdirSync(pendingDir);
-      const hasUpdatePayload = files.some((f) => f.endsWith('.exe') || f === 'update-info.json');
-      if (!hasUpdatePayload) return;
-
-      postUpdateScheduled = true;
-      const installScript = path.join(pluginScriptsDir, 'install_boot_hook.js');
-      const injectScript = path.join(pluginScriptsDir, 'inject_live.js');
-      if (!fs.existsSync(installScript)) return;
-
-      const sysNode = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'nodejs', 'node.exe');
-      if (!fs.existsSync(sysNode)) return;
-
-      const oneShotCode = `
-        const fs = require('fs');
-        const { asarPath, isAsarPatched, install } = require(${JSON.stringify(installScript)});
-        const { injectLive } = require(${JSON.stringify(injectScript)});
-        let ticks = 0;
-        const timer = setInterval(async () => {
-          ticks++;
-          if (ticks > 75) {
-            clearInterval(timer);
-            process.exit(0);
-          }
-          try {
-            if (fs.existsSync(asarPath) && !isAsarPatched(asarPath)) {
-              clearInterval(timer);
-              install(false);
-              try { await injectLive('apply', 20, 450); } catch (_) {}
-              process.exit(0);
-            }
-          } catch (_) {}
-        }, 800);
-      `;
-
-      const child = spawn(sysNode, ['-e', oneShotCode], {
-        cwd: os.tmpdir(),
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-      });
-      child.unref();
-    } catch (_) {}
-  }
+  // 遵照规范移除隐式后台轮询进程，零后台常驻
 
 
   function injectIntoWebContents(wc) {
@@ -667,11 +635,6 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         injectIntoWebContents(win.webContents);
       }
     });
-    electron.app.on('before-quit', () => {
-      scheduleOneShotPostUpdatePatchIfPending();
-    });
-    electron.app.on('will-quit', () => {
-      scheduleOneShotPostUpdatePatchIfPending();
-    });
+    
   }
 }

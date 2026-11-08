@@ -4,7 +4,7 @@
   "description": "Antigravity 2.0 简体中文汉化补丁与自动化提取工具",
   "main": "install.js",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "install-patch": "node install.js",

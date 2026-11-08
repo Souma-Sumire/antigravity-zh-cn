@@ -92,28 +92,52 @@ function isAsarPatched(targetAsarPath = asarPath) {
   }
 }
 
+function writeAllBytesSync(fd, buf) {
+  let bytesWrittenTotal = 0;
+  while (bytesWrittenTotal < buf.length) {
+    const written = fs.writeSync(
+      fd,
+      buf,
+      bytesWrittenTotal,
+      buf.length - bytesWrittenTotal,
+      bytesWrittenTotal
+    );
+    if (written <= 0) {
+      throw new Error(`写入停滞: 已写 ${bytesWrittenTotal} / ${buf.length} 字节`);
+    }
+    bytesWrittenTotal += written;
+  }
+  return bytesWrittenTotal;
+}
+
 function writeAsarSafely(targetPath, finalBuf) {
+  // 1. 优先尝试原子化临时文件重命名
   const tmpPath = `${targetPath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   try {
     fs.writeFileSync(tmpPath, finalBuf);
     fs.renameSync(tmpPath, targetPath);
-    try {
-      const stat = fs.statSync(targetPath);
-      if (stat.size === finalBuf.length) {
-        return 'atomic-rename';
-      }
-    } catch (_) {}
+    const stat = fs.statSync(targetPath);
+    if (stat.size === finalBuf.length) {
+      return 'atomic-rename';
+    }
   } catch (_) {
     try {
       if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
     } catch (_) {}
   }
 
+  // 2. 尝试 in-place 原位写入（必须循环写入确保全部字节写入完毕，失败绝不截断）
+  let inPlaceError = null;
   try {
     const fd = fs.openSync(targetPath, 'r+');
     try {
-      fs.writeSync(fd, finalBuf, 0, finalBuf.length, 0);
-      fs.ftruncateSync(fd, finalBuf.length);
+      const written = writeAllBytesSync(fd, finalBuf);
+      if (written === finalBuf.length) {
+        fs.ftruncateSync(fd, finalBuf.length);
+        fs.fsyncSync(fd);
+      } else {
+        throw new Error(`原位写入不完整: 写入 ${written} 字节，预期 ${finalBuf.length} 字节`);
+      }
     } finally {
       fs.closeSync(fd);
     }
@@ -121,57 +145,25 @@ function writeAsarSafely(targetPath, finalBuf) {
     if (stat.size === finalBuf.length) {
       return 'in-place-verified';
     }
-  } catch (_) {}
+  } catch (err) {
+    inPlaceError = err;
+  }
 
+  // 3. 尝试直接截断覆盖写入
   try {
     fs.writeFileSync(targetPath, finalBuf);
-    return 'direct';
-  } catch (_) {}
+    const stat = fs.statSync(targetPath);
+    if (stat.size === finalBuf.length) {
+      return 'direct';
+    }
+  } catch (err) {
+    const reason = inPlaceError ? inPlaceError.message : err.message;
+    throw new Error(
+      `无法写入目标文件 ${targetPath}（文件正被 Antigravity 进程独占）。原因: ${reason}。请先退出 Antigravity 应用后再执行安装或更新。`
+    );
+  }
 
-  fs.writeFileSync(asarPendingPath, finalBuf);
-  const watcherCode = `
-    const fs = require('fs');
-    const src = ${JSON.stringify(asarPendingPath)};
-    const dst = ${JSON.stringify(targetPath)};
-    let tries = 0;
-    const timer = setInterval(() => {
-      tries++;
-      if (!fs.existsSync(src) || tries > 1800) {
-        clearInterval(timer);
-        process.exit(0);
-      }
-      try {
-        const buf = fs.readFileSync(src);
-        const fd = fs.openSync(dst, 'r+');
-        try {
-          fs.writeSync(fd, buf, 0, buf.length, 0);
-          fs.ftruncateSync(fd, buf.length);
-        } finally {
-          fs.closeSync(fd);
-        }
-        fs.unlinkSync(src);
-        clearInterval(timer);
-        process.exit(0);
-      } catch (_) {
-        try {
-          fs.copyFileSync(src, dst);
-          fs.unlinkSync(src);
-          clearInterval(timer);
-          process.exit(0);
-        } catch (_) {}
-      }
-    }, 500);
-  `;
-  const env = Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' });
-  const child = spawn(process.execPath, ['-e', watcherCode], {
-    cwd: os.tmpdir(),
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-    env
-  });
-  child.unref();
-  return 'deferred-on-close';
+  return 'direct';
 }
 
 function uninstall() {

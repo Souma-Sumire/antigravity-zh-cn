@@ -4,7 +4,7 @@
  * 
  * 功能：
  * 1. 自动从 Antigravity 安装目录的 language_server.exe (嵌入 Zip) 中提取前端 Web Bundle (main.js)
- * 2. 自动从 app.asar 中提取主进程代码 (menu.js, ipcHandlers.js 等)
+ * 2. 支持读取解压出的本地 Web Bundle (main.js)
  * 3. 运行多维 UI 模式匹配 (React Props, DOM Attr, JSX Text, 状态提示, 对话框)
  * 4. 结合语法规则与智能降噪过滤，剔除代码标识符与样式类
  * 5. 与 zh_cn_runtime.js 的 EXACT_MAP 进行去重与归一化对比
@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const zlib = require('zlib');
+const vm = require('vm');
 
 // 默认路径配置
 const DEFAULT_INSTALL_DIR = path.join(
@@ -181,7 +182,7 @@ function loadRuntimeDictionary(runtimePath) {
     throw new Error('未能从 zh_cn_runtime.js 解析 EXACT_MAP');
   }
   const mapCode = code.slice(start + 'const EXACT_MAP = '.length, end + 4);
-  const exactMap = eval('(' + mapCode + ')');
+  const exactMap = vm.runInNewContext('(' + mapCode + ')', Object.create(null), { timeout: 3000 });
   return { exactMap, fullCode: code };
 }
 
@@ -276,24 +277,29 @@ function main() {
 // 合并翻译至 zh_cn_runtime.js
 function mergeTranslation(filePath) {
   const toMerge = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  let runtimeCode = fs.readFileSync(RUNTIME_PATH, 'utf8');
+  const { exactMap, fullCode: runtimeCode } = loadRuntimeDictionary(RUNTIME_PATH);
 
   let addedCount = 0;
   let entriesToAdd = '';
 
   for (const [en, zh] of Object.entries(toMerge)) {
     if (en === zh) continue; // 未翻译的跳过
-    const key = JSON.stringify(en);
-    const val = JSON.stringify(zh);
-    if (!runtimeCode.includes(key + ':')) {
+    if (exactMap[en] === undefined) {
+      const key = JSON.stringify(en);
+      const val = JSON.stringify(zh);
       entriesToAdd += `    ${key}: ${val},\n`;
+      exactMap[en] = zh;
       addedCount++;
     }
   }
 
   if (addedCount > 0) {
-    runtimeCode = runtimeCode.replace('const EXACT_MAP = {', 'const EXACT_MAP = {\n' + entriesToAdd);
-    fs.writeFileSync(RUNTIME_PATH, runtimeCode, 'utf8');
+    const bakPath = `${RUNTIME_PATH}.${Date.now()}.bak`;
+    fs.copyFileSync(RUNTIME_PATH, bakPath);
+    log(`已创建词典安全备份: ${bakPath}`);
+
+    const newCode = runtimeCode.replace('const EXACT_MAP = {', 'const EXACT_MAP = {\n' + entriesToAdd);
+    fs.writeFileSync(RUNTIME_PATH, newCode, 'utf8');
     log(`成功将 ${addedCount} 条翻译合并至 ${RUNTIME_PATH}`);
   } else {
     log(`未发现新的有效翻译词条进行合并。`);

@@ -23,8 +23,9 @@ for (const dir of candidateDirs) {
 function copyDirRecursive(src, dest) {
   if (path.resolve(src) === path.resolve(dest)) return;
   fs.mkdirSync(dest, { recursive: true });
+  const IGNORE_NAMES = new Set(['.git', 'node_modules', '.workbuddy', '.vscode', '.idea', 'scratch']);
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    if (entry.name === '.git' || entry.name === 'node_modules') continue;
+    if (IGNORE_NAMES.has(entry.name) || entry.name.endsWith('.tmp') || entry.name.endsWith('.log')) continue;
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
@@ -35,18 +36,34 @@ function copyDirRecursive(src, dest) {
   }
 }
 
-function enablePluginViaLsRpc() {
+function setPluginStateViaLsRpc(enabled = true) {
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (!settled) {
+        settled = true;
+        resolve(result);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      try { req.destroy(new Error('RPC timed out')); } catch (_) {}
+      finish(false);
+    }, 3500);
+
     const lsAddr = process.env.ANTIGRAVITY_LS_ADDRESS || 'localhost:53568';
     const csrf = process.env.ANTIGRAVITY_CSRF_TOKEN || '';
     const [host, portStr] = lsAddr.split(':');
     const port = parseInt(portStr, 10);
-    if (!port) return resolve(false);
+    if (!port) {
+      clearTimeout(timer);
+      return finish(false);
+    }
 
     const payload = JSON.stringify({
       userConfig: {
         plugins: {
-          'zh-cn-ui': { enabled: true }
+          'zh-cn-ui': { enabled: Boolean(enabled) }
         }
       }
     });
@@ -66,13 +83,31 @@ function enablePluginViaLsRpc() {
       },
       (res) => {
         res.on('data', () => {});
-        res.on('end', () => resolve(res.statusCode === 200));
+        res.on('end', () => {
+          clearTimeout(timer);
+          finish(res.statusCode === 200);
+        });
       }
     );
-    req.on('error', () => resolve(false));
+
+    req.on('timeout', () => {
+      clearTimeout(timer);
+      req.destroy(new Error('HTTP request timeout'));
+      finish(false);
+    });
+
+    req.on('error', () => {
+      clearTimeout(timer);
+      finish(false);
+    });
+
     req.write(payload);
     req.end();
   });
+}
+
+function enablePluginViaLsRpc() {
+  return setPluginStateViaLsRpc(true);
 }
 
 async function main() {
@@ -96,11 +131,15 @@ async function main() {
   const rpcOk = await enablePluginViaLsRpc();
   console.log('   RPC enable status:', rpcOk);
 
-  console.log('4. Syncing historical conversation titles to Chinese...');
+  console.log('4. Checking historical conversation titles policy...');
   try {
     const { syncHistoricalTitles } = require(path.join(targetPluginDir, 'scripts', 'sync_historical_titles.js'));
     const syncRes = await syncHistoricalTitles();
-    console.log(`   Synchronized ${syncRes.count} historical conversation titles.`);
+    if (syncRes.skipped) {
+      console.log('   Historical titles sync skipped (default safe mode: protecting user privacy & data integrity).');
+    } else {
+      console.log(`   Synchronized ${syncRes.count} historical conversation titles.`);
+    }
   } catch (err) {
     console.warn('   Historical titles sync warning:', err.message);
   }
@@ -121,3 +160,5 @@ main().catch((err) => {
   console.error('Installation error:', err);
   process.exit(1);
 });
+
+module.exports = { copyDirRecursive, setPluginStateViaLsRpc, enablePluginViaLsRpc };
