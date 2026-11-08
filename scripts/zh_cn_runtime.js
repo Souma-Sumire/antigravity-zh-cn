@@ -854,6 +854,17 @@
     "Command execution": "命令执行",
     "Semantic search": "语义搜索",
     "Permissions": "权限管理",
+    "Configure what the agent can do in local and remote conversations. Learn more.": "配置 Agent 在本地和远程会话中可执行的操作。了解更多。",
+    "Configure what the agent can do in local and remote conversations.": "配置 Agent 在本地和远程会话中可执行的操作。",
+    "Configure what the agent can do in local and remote conversations": "配置 Agent 在本地和远程会话中可执行的操作",
+    "Configure what the agent can do in local conversations.": "配置 Agent 在本地会话中可执行的操作。",
+    "Configure what the agent can do in local conversations": "配置 Agent 在本地会话中可执行的操作",
+    "Configure what the agent can do in remote conversations.": "配置 Agent 在远程会话中可执行的操作。",
+    "Configure what the agent can do in remote conversations": "配置 Agent 在远程会话中可执行的操作",
+    "Modified in": "已修改于",
+    "Modified in workspace": "已在工作区中修改",
+    "Modified in project": "已在项目中修改",
+    "Modified in user settings": "已在用户设置中修改",
     "Configure global allowed and denied resource permissions. Learn more.": "配置全局允许与拒绝的资源访问权限。了解更多。",
     "Configure global allowed and denied resource permissions.": "配置全局允许和禁止的资源访问权限。",
     "Learn more.": "了解更多。",
@@ -4595,6 +4606,18 @@
   };
 
   const REGEX_RULES = [
+    [
+      /^Modified\s+in\s+(.+)$/i,
+      (_m, target) => `已在 ${target} 中修改`
+    ],
+    [
+      /^Overridden\s+in\s+(.+)$/i,
+      (_m, target) => `已在 ${target} 中覆盖`
+    ],
+    [
+      /^Configured\s+in\s+(.+)$/i,
+      (_m, target) => `已在 ${target} 中配置`
+    ],
     [
       /^Show\s+(\d+)\s+breakdowns?\.?$/i,
       (_m, count) => `显示 ${count} 项明细`
