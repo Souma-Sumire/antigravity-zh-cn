@@ -25,6 +25,25 @@
   }
 
   const EXACT_MAP = {
+    "Introducing Remote Agents": "推出远程 Agent",
+    "Your agents can now run in the cloud and keep working after you close the app. Check on them from any browser at antigravity.google.com. Create a Remote Project to get started.": "您的 Agent 现已可在云端运行，并在关闭应用后继续工作。可通过任意浏览器访问 antigravity.google.com 查看它们。创建远程项目即可开始。",
+    "Your agents can now run in the cloud and keep working after you close the app. Check on them from any browser at antigravity.google.com. Create a Remote Project to get started": "您的 Agent 现已可在云端运行，并在关闭应用后继续工作。可通过任意浏览器访问 antigravity.google.com 查看它们。创建远程项目即可开始",
+    "Your agents can now run in the cloud and keep working after you close the app.": "您的 Agent 现已可在云端运行，并在关闭应用后继续工作。",
+    "Your agents can now run in the cloud and keep working after you close the app": "您的 Agent 现已可在云端运行，并在关闭应用后继续工作",
+    "Check on them from any browser at antigravity.google.com.": "可通过任意浏览器访问 antigravity.google.com 查看它们。",
+    "Check on them from any browser at antigravity.google.com": "可通过任意浏览器访问 antigravity.google.com 查看它们",
+    "Create a Remote Project to get started.": "创建远程项目即可开始。",
+    "Create a Remote Project to get started": "创建远程项目即可开始",
+    "Uploaded files and connected resources are mounted in your cloud environment.": "已上传的文件与已连接的资源已挂载至您的云端环境。",
+    "Uploaded files and connected resources are mounted in your cloud environment": "已上传的文件与已连接的资源已挂载至您的云端环境",
+    "+ Add Resource": "+ 添加资源",
+    "+ Add Folder": "+ 添加文件夹",
+    "Refactor the settings page": "重构设置页面",
+    "Add a dark mode toggle": "添加暗黑模式切换开关",
+    "Fix the flaky login test": "修复不稳定的登录测试",
+    "Fix rounding in invoice totals": "修复发票总计中的四舍五入问题",
+    "Add CSV export for invoices": "为发票添加 CSV 导出功能",
+
     "Uses your local files and tools. Schedules only.": "使用您的本地文件与工具。仅限计划任务。",
     "Runs even when your computer is off. Schedules and events.": "即使您的计算机处于关闭状态也能运行。包含计划任务与事件。",
     "Runs even when your computer is off. Schedules only.": "即使您的计算机处于关闭状态也能运行。仅限计划任务。",
@@ -5321,7 +5340,9 @@
     }
     const isToastOrNotification = Boolean(
       el.closest &&
-      el.closest('[data-testid="toast-notification"], [data-notification-tag]')
+      el.closest(
+        '[data-testid="toast-notification"], [data-notification-tag], [data-testid="nux-card"], [data-testid*="banner"], [data-testid*="announcement"], [role="status"], [role="alert"]'
+      )
     );
     if (isToastOrNotification) {
       if (el.closest('pre, code, .monaco-editor, .xterm, .katex, #agy-zh-cn-toggle-bar')) {

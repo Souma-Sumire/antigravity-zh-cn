@@ -615,60 +615,6 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     } catch (_) {}
   }
 
-  // 实时监听本地会话数据库及会话文件变动，自动机翻新生成的会话标题
-  function setupTitleSyncWatcher() {
-    try {
-      const geminiAgyDir = path.join(os.homedir(), '.gemini', 'antigravity');
-      if (!fs.existsSync(geminiAgyDir)) return;
-
-      let debounceTimer = null;
-      const triggerSyncAndBroadcast = () => {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          const syncScript = path.join(pluginScriptsDir, 'sync_historical_titles.js');
-          if (!fs.existsSync(syncScript)) return;
-
-          const child = spawn(
-            process.execPath,
-            [
-              '-e',
-              `
-              try {
-                const { syncHistoricalTitles } = require(${JSON.stringify(syncScript)});
-                syncHistoricalTitles().then(res => {
-                  if (res && res.count > 0) {
-                    try {
-                      const injectScript = ${JSON.stringify(path.join(pluginScriptsDir, 'inject_live.js'))};
-                      const { injectLive } = require(injectScript);
-                      injectLive('apply', 3, 300).catch(() => {});
-                    } catch (_) {}
-                  }
-                }).catch(() => {});
-              } catch (_) {}
-            `
-            ],
-            {
-              cwd: os.tmpdir(),
-              detached: true,
-              stdio: 'ignore',
-              windowsHide: true
-            }
-          );
-          child.unref();
-        }, 1500);
-      };
-
-      try {
-        fs.watch(geminiAgyDir, (_eventType, filename) => {
-          if (!filename) return;
-          const fn = filename.toString();
-          if (fn.includes('conversation_summaries.db') || fn.endsWith('.pbtxt')) {
-            triggerSyncAndBroadcast();
-          }
-        });
-      } catch (_) {}
-    } catch (_) {}
-  }
 
   function injectIntoWebContents(wc) {
     if (!wc || wc.isDestroyed()) return;
@@ -707,7 +653,6 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   }
 
   if (electron.app) {
-    setupTitleSyncWatcher();
     electron.app.on('web-contents-created', (_event, contents) => {
       injectIntoWebContents(contents);
     });

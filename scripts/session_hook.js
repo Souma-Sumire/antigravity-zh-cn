@@ -51,7 +51,8 @@ if (shouldRun) {
         cwd: os.tmpdir(),
         detached: true,
         stdio: 'ignore',
-        windowsHide: true
+        windowsHide: true,
+        env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' })
       }
     );
     child.unref();
