@@ -25,6 +25,8 @@
   }
 
   const EXACT_MAP = {
+    "Antigravity": "Antigravity",
+    "antigravity": "antigravity",
     "Introducing Remote Agents": "推出远程 Agent",
     "Your agents can now run in the cloud and keep working after you close the app. Check on them from any browser at antigravity.google.com. Create a Remote Project to get started.": "您的 Agent 现已可在云端运行，并在关闭应用后继续工作。可通过任意浏览器访问 antigravity.google.com 查看它们。创建远程项目即可开始。",
     "Your agents can now run in the cloud and keep working after you close the app. Check on them from any browser at antigravity.google.com. Create a Remote Project to get started": "您的 Agent 现已可在云端运行，并在关闭应用后继续工作。可通过任意浏览器访问 antigravity.google.com 查看它们。创建远程项目即可开始",
@@ -5453,6 +5455,7 @@
     if (!str || typeof str !== 'string') return null;
     const trimmed = str.trim();
     if (!trimmed) return null;
+    if (trimmed.toLowerCase() === 'antigravity') return str;
 
     if (customDict[trimmed]) {
       return str.replace(trimmed, () => customDict[trimmed]);
@@ -5994,9 +5997,10 @@
       }
       curr = walker.nextNode();
     }
+    sanitizeBrandAndWorkspaceHeaders();
   }
 
-  function sanitizeProjectHeaders() {
+  function sanitizeBrandAndWorkspaceHeaders() {
     const REVERT_MAP = {
       '反重力-Zh-CN': 'antigravity-zh-cn',
       '反重力-zh-cn': 'antigravity-zh-cn',
@@ -6005,7 +6009,9 @@
       '测试': 'test'
     };
     try {
-      const headers = document.querySelectorAll('[data-testid="project-header"]');
+      const headers = document.querySelectorAll(
+        '[data-testid="project-header"], [data-testid*="project-header"], [data-testid="sidebar-project-header"]'
+      );
       headers.forEach((h) => {
         for (const [zh, en] of Object.entries(REVERT_MAP)) {
           if (h.textContent && h.textContent.includes(zh)) {
@@ -6014,9 +6020,35 @@
             while (n) {
               if (n.nodeValue && n.nodeValue.includes(zh)) {
                 n.nodeValue = n.nodeValue.replace(zh, en);
+                const rec = state.nodeMap.get(n);
+                if (rec) {
+                  rec.orig = en;
+                  rec.translated = null;
+                }
               }
               n = walker.nextNode();
             }
+          }
+        }
+      });
+
+      const titleMenuItems = document.querySelectorAll(
+        '[data-testid="title-menu-bar-item"], .title-menu-bar-item, [data-testid*="menu-bar-item"]'
+      );
+      titleMenuItems.forEach((item) => {
+        if (item.textContent && item.textContent.includes('反重力')) {
+          const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+          let n = walker.nextNode();
+          while (n) {
+            if (n.nodeValue && n.nodeValue.includes('反重力')) {
+              n.nodeValue = n.nodeValue.replace(/反重力/g, 'Antigravity');
+              const rec = state.nodeMap.get(n);
+              if (rec) {
+                rec.orig = 'Antigravity';
+                rec.translated = 'Antigravity';
+              }
+            }
+            n = walker.nextNode();
           }
         }
       });
@@ -6084,6 +6116,18 @@
     window.__AGY_TITLE_CACHE__ = Object.assign(parsed, window.__AGY_TITLE_CACHE__ || {});
     for (const bk of badKeys) {
       if (window.__AGY_TITLE_CACHE__) delete window.__AGY_TITLE_CACHE__[bk];
+    }
+    for (const k of Object.keys(parsed)) {
+      if (parsed[k] === '反重力' || parsed[k] === '反重力-Zh-CN') {
+        delete parsed[k];
+      }
+    }
+    if (window.__AGY_TITLE_CACHE__) {
+      for (const k of Object.keys(window.__AGY_TITLE_CACHE__)) {
+        if (window.__AGY_TITLE_CACHE__[k] === '反重力' || window.__AGY_TITLE_CACHE__[k] === '反重力-Zh-CN') {
+          delete window.__AGY_TITLE_CACHE__[k];
+        }
+      }
     }
     try { window.localStorage.setItem(TITLE_CACHE_STORAGE_KEY, JSON.stringify(window.__AGY_TITLE_CACHE__)); } catch (_) {}
   } catch (_) {}
@@ -6416,7 +6460,7 @@
       }
       mountToggleBadge();
       updateToggleBadge();
-      sanitizeProjectHeaders();
+      sanitizeBrandAndWorkspaceHeaders();
     },
     addCustomEntries: (entries) => {
       if (!entries || typeof entries !== 'object') return;
