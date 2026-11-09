@@ -6102,8 +6102,22 @@
       window.localStorage.setItem(TITLE_TRANS_STORAGE_KEY, val);
     } catch (_) {}
     console.log('__AGY_CONFIG_SYNC__:' + JSON.stringify({ enableRemoteTitleTranslation: Boolean(enabled) }));
-    if (enabled && currentLang === 'zh-CN') {
-      walkAndTranslate(document.body);
+
+    if (!enabled) {
+      window.__AGY_TITLE_CACHE__ = {};
+      try {
+        window.localStorage.removeItem(TITLE_CACHE_STORAGE_KEY);
+      } catch (_) {}
+      if (currentLang === 'zh-CN') {
+        restoreAllToEnglish();
+        state.nodeMap = new WeakMap();
+        state.translatedNodes.clear();
+        walkAndTranslate(document.body);
+      }
+    } else {
+      if (currentLang === 'zh-CN') {
+        walkAndTranslate(document.body);
+      }
     }
   }
 
@@ -6155,22 +6169,23 @@
 
   let contextMenuEl = null;
 
-  function hideContextMenu() {
-    if (contextMenuEl && contextMenuEl.parentNode) {
-      contextMenuEl.parentNode.removeChild(contextMenuEl);
-      contextMenuEl = null;
+  function handleMenuKeydown(e) {
+    if (e.key === 'Escape' || e.code === 'Escape') {
+      hideContextMenu();
     }
   }
 
+  function hideContextMenu() {
+    const el = document.getElementById('agy-zh-cn-context-menu');
+    if (el && el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+    contextMenuEl = null;
+    document.removeEventListener('keydown', handleMenuKeydown, true);
+  }
+
   function showContextMenu() {
-    const oldExisting = document.getElementById('agy-zh-cn-context-menu');
-    if (oldExisting && oldExisting.parentNode) {
-      oldExisting.parentNode.removeChild(oldExisting);
-    }
-    if (contextMenuEl) {
-      hideContextMenu();
-      return;
-    }
+    hideContextMenu();
 
     const menu = document.createElement('div');
     menu.id = 'agy-zh-cn-context-menu';
@@ -6203,7 +6218,8 @@
       'gap:6px',
       'cursor:pointer',
       'font-size:11px',
-      'font-weight:500'
+      'font-weight:500',
+      'padding:2px 0'
     ].join(';');
 
     const checkbox = document.createElement('input');
@@ -6217,9 +6233,13 @@
       'margin:0'
     ].join(';');
 
-    checkbox.addEventListener('change', () => {
-      setTitleTranslationEnabled(checkbox.checked);
-    });
+    const onToggle = (e) => {
+      e.stopPropagation();
+      const nextChecked = checkbox.checked;
+      setTitleTranslationEnabled(nextChecked);
+    };
+
+    checkbox.addEventListener('change', onToggle);
 
     const span = document.createElement('span');
     span.textContent = '联网翻译会话标题';
@@ -6228,6 +6248,8 @@
     label.appendChild(span);
     menu.appendChild(label);
 
+    menu.addEventListener('pointerdown', (e) => e.stopPropagation());
+    menu.addEventListener('mousedown', (e) => e.stopPropagation());
     menu.addEventListener('click', (e) => e.stopPropagation());
     menu.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -6236,6 +6258,7 @@
 
     document.body.appendChild(menu);
     contextMenuEl = menu;
+    document.addEventListener('keydown', handleMenuKeydown, true);
   }
 
   function updateToggleBadge() {
@@ -6289,24 +6312,56 @@
     ].join(';');
 
     btn.addEventListener('click', () => {
+      hideContextMenu();
       window.__AGY_I18N__.toggle();
     });
 
     btn.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      showContextMenu();
+      if (contextMenuEl) {
+        hideContextMenu();
+      } else {
+        showContextMenu();
+      }
     });
 
     bar.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      showContextMenu();
+      if (contextMenuEl) {
+        hideContextMenu();
+      } else {
+        showContextMenu();
+      }
     });
 
-    if (!window.__agyToggleClickAttached) {
-      window.__agyToggleClickAttached = true;
-      document.addEventListener('click', () => hideContextMenu(), { capture: true });
+    const handleOutsideInteraction = (e) => {
+      if (!contextMenuEl) return;
+      const target = e.target;
+      if (target && typeof target.closest === 'function') {
+        if (target.closest('#agy-zh-cn-context-menu') || target.closest('#agy-zh-cn-toggle-bar')) {
+          return;
+        }
+      }
+      hideContextMenu();
+    };
+
+    if (window.__agyOutsideHandler) {
+      document.removeEventListener('pointerdown', window.__agyOutsideHandler, true);
+      document.removeEventListener('mousedown', window.__agyOutsideHandler, true);
+      document.removeEventListener('click', window.__agyOutsideHandler, true);
+    }
+    window.__agyOutsideHandler = handleOutsideInteraction;
+    document.addEventListener('pointerdown', handleOutsideInteraction, true);
+    document.addEventListener('mousedown', handleOutsideInteraction, true);
+    document.addEventListener('click', handleOutsideInteraction, true);
+
+    if (!window.__agyKeyAttached) {
+      window.__agyKeyAttached = true;
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideContextMenu();
+      }, true);
       window.addEventListener('blur', () => hideContextMenu());
     }
 
