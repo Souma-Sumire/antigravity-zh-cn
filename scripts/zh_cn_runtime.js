@@ -5662,6 +5662,10 @@
     '[data-testid="user-message-media-scroll"]',
     '[data-testid="user-message-content"]',
     '#agy-zh-cn-toggle-bar',
+    '[data-testid="project-header"]',
+    '[data-testid*="project-header"]',
+    '[data-testid="sidebar-project-header"]',
+    '[data-testid="workspace-title"]',
     '[translate="no"]',
     '.notranslate',
     '.no-translate',
@@ -5748,6 +5752,9 @@
       return false;
     }
 
+    if (el.closest && el.closest('[data-testid="project-header"], [data-testid*="project-header"], [data-testid="sidebar-project-header"]')) {
+      return true;
+    }
     if (el.hasAttribute('data-markdown-root')) {
       return true;
     }
@@ -5989,6 +5996,33 @@
     }
   }
 
+  function sanitizeProjectHeaders() {
+    const REVERT_MAP = {
+      '反重力-Zh-CN': 'antigravity-zh-cn',
+      '反重力-zh-cn': 'antigravity-zh-cn',
+      '反重力': 'antigravity',
+      '罗斯福': 'Roosevelt',
+      '测试': 'test'
+    };
+    try {
+      const headers = document.querySelectorAll('[data-testid="project-header"]');
+      headers.forEach((h) => {
+        for (const [zh, en] of Object.entries(REVERT_MAP)) {
+          if (h.textContent && h.textContent.includes(zh)) {
+            const walker = document.createTreeWalker(h, NodeFilter.SHOW_TEXT);
+            let n = walker.nextNode();
+            while (n) {
+              if (n.nodeValue && n.nodeValue.includes(zh)) {
+                n.nodeValue = n.nodeValue.replace(zh, en);
+              }
+              n = walker.nextNode();
+            }
+          }
+        }
+      });
+    } catch (_) {}
+  }
+
   function restoreAllToEnglish() {
     state.translatedNodes.forEach((node) => {
       const record = state.nodeMap.get(node);
@@ -6038,9 +6072,20 @@
 
   try {
     const localStore = window.localStorage.getItem(TITLE_CACHE_STORAGE_KEY);
+    let parsed = {};
     if (localStore) {
-      window.__AGY_TITLE_CACHE__ = Object.assign(JSON.parse(localStore), window.__AGY_TITLE_CACHE__ || {});
+      try { parsed = JSON.parse(localStore); } catch (_) {}
     }
+    const badKeys = ['antigravity-zh-cn', 'Antigravity', 'antigravity', 'test', 'FDR', 'Roosevelt', 'FDR-2.0'];
+    for (const bk of badKeys) {
+      delete parsed[bk];
+      if (window.__AGY_TITLE_CACHE__) delete window.__AGY_TITLE_CACHE__[bk];
+    }
+    window.__AGY_TITLE_CACHE__ = Object.assign(parsed, window.__AGY_TITLE_CACHE__ || {});
+    for (const bk of badKeys) {
+      if (window.__AGY_TITLE_CACHE__) delete window.__AGY_TITLE_CACHE__[bk];
+    }
+    try { window.localStorage.setItem(TITLE_CACHE_STORAGE_KEY, JSON.stringify(window.__AGY_TITLE_CACHE__)); } catch (_) {}
   } catch (_) {}
 
   function isTitleTranslationEnabled() {
@@ -6066,6 +6111,16 @@
   async function maybeTranslateTitleAsync(rawText, node) {
     if (!isTitleTranslationEnabled() || currentLang !== 'zh-CN') return;
     if (!rawText || typeof rawText !== 'string') return;
+    if (!node || !node.parentElement) return;
+
+    const parentEl = node.parentElement;
+    if (parentEl.closest('[data-testid="project-header"], [data-testid*="project-"], [data-testid*="workspace"], .project-header')) {
+      return;
+    }
+
+    const isConvRow = Boolean(parentEl.closest('[data-testid="conversation-row-sidebar"], [data-testid*="conversation-row"]'));
+    if (!isConvRow) return;
+
     const s = rawText.trim();
     if (s.length < 3 || s.length > 80 || titleTranslatingSet.has(s)) return;
     if (!/^[A-Za-z0-9][A-Za-z0-9\s\-_:,.!?()'/]+$/.test(s)) return;
@@ -6108,6 +6163,10 @@
   }
 
   function showContextMenu() {
+    const oldExisting = document.getElementById('agy-zh-cn-context-menu');
+    if (oldExisting && oldExisting.parentNode) {
+      oldExisting.parentNode.removeChild(oldExisting);
+    }
     if (contextMenuEl) {
       hideContextMenu();
       return;
@@ -6121,20 +6180,20 @@
       'bottom:34px',
       'right:10px',
       'z-index:2147483645',
-      'min-width:195px',
-      'padding:8px 10px',
-      'border-radius:6px',
+      'padding:6px 10px',
+      'border-radius:5px',
       'border:1px solid rgba(255,255,255,0.14)',
       'background:rgba(26,28,32,0.96)',
-      'box-shadow:0 8px 24px rgba(0,0,0,0.55)',
-      'backdrop-filter:blur(12px)',
-      '-webkit-backdrop-filter:blur(12px)',
+      'box-shadow:0 6px 18px rgba(0,0,0,0.5)',
+      'backdrop-filter:blur(10px)',
+      '-webkit-backdrop-filter:blur(10px)',
       'color:#e2e4e9',
       'font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif',
       'font-size:11px',
-      'line-height:1.4',
+      'line-height:1',
       'user-select:none',
-      'pointer-events:auto'
+      'pointer-events:auto',
+      'white-space:nowrap'
     ].join(';');
 
     const label = document.createElement('label');
@@ -6163,17 +6222,11 @@
     });
 
     const span = document.createElement('span');
-    span.textContent = '联网翻译历史会话标题';
+    span.textContent = '联网翻译会话标题';
 
     label.appendChild(checkbox);
     label.appendChild(span);
-
-    const desc = document.createElement('div');
-    desc.style.cssText = 'font-size:10px;color:#8f949f;margin-top:4px;padding-left:19px;line-height:1.3;';
-    desc.textContent = '展示层实时在线汉化（安全零改写本地数据库）';
-
     menu.appendChild(label);
-    menu.appendChild(desc);
 
     menu.addEventListener('click', (e) => e.stopPropagation());
     menu.addEventListener('contextmenu', (e) => {
@@ -6308,6 +6361,7 @@
       }
       mountToggleBadge();
       updateToggleBadge();
+      sanitizeProjectHeaders();
     },
     addCustomEntries: (entries) => {
       if (!entries || typeof entries !== 'object') return;
