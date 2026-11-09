@@ -36,11 +36,20 @@ function formatPangu(text) {
 }
 
 function isRemoteTranslateEnabled() {
-  return (
-    process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1' &&
-    process.env.AGY_DISABLE_REMOTE_TRANSLATE !== '1' &&
-    process.env.AGY_OFFLINE !== '1'
-  );
+  if (process.env.AGY_DISABLE_REMOTE_TRANSLATE === '1' || process.env.AGY_OFFLINE === '1') {
+    return false;
+  }
+  if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1') {
+    return true;
+  }
+  try {
+    const configPath = path.join(os.homedir(), '.gemini', 'antigravity', 'translation_config.json');
+    if (fs.existsSync(configPath)) {
+      const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      return Boolean(cfg.enableRemoteTitleTranslation);
+    }
+  } catch (_) {}
+  return false;
 }
 
 function getProxyConfig() {

@@ -30,7 +30,15 @@ if (shouldRun) {
   try {
     const injectScript = path.join(__dirname, 'inject_live.js');
     const syncScript = path.join(__dirname, 'sync_historical_titles.js');
-    const enableRemote = process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1';
+    let enableRemote = process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1';
+    if (!enableRemote) {
+      try {
+        const configPath = path.join(os.homedir(), '.gemini', 'antigravity', 'translation_config.json');
+        if (fs.existsSync(configPath)) {
+          enableRemote = Boolean(JSON.parse(fs.readFileSync(configPath, 'utf8')).enableRemoteTitleTranslation);
+        }
+      } catch (_) {}
+    }
 
     // 默认仅执行轻量实时界面注入，严禁默认扫描/改写数据库或外传会话标题
     const runnerCode = enableRemote

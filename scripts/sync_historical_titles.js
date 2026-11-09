@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { translateBatchWithApi } = require('./api_translator');
+const { translateBatchWithApi, isRemoteTranslateEnabled } = require('./api_translator');
 
 function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -22,13 +22,13 @@ function getSqliteModule() {
 }
 
 async function syncHistoricalTitles() {
-  if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION !== '1') {
+  if (!isRemoteTranslateEnabled()) {
     return {
       success: true,
       count: 0,
       items: [],
       skipped: true,
-      reason: '会话标题翻译与本地数据同步默认已关闭（保护用户隐私与数据安全）。如需开启，请显式设置环境变量 AGY_ENABLE_REMOTE_TITLE_TRANSLATION=1'
+      reason: '会话标题翻译功能未开启。可通过右下角悬浮按钮右键菜单勾选开启，或设置环境变量 AGY_ENABLE_REMOTE_TITLE_TRANSLATION=1'
     };
   }
 

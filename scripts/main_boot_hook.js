@@ -528,12 +528,42 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
 
   const pluginScriptsDir = path.join(os.homedir(), '.gemini', 'config', 'plugins', 'zh-cn-ui', 'scripts');
 
+  const configPath = path.join(os.homedir(), '.gemini', 'antigravity', 'translation_config.json');
+
+  function isTitleTranslateConfigEnabled() {
+    if (process.env.AGY_DISABLE_REMOTE_TRANSLATE === '1' || process.env.AGY_OFFLINE === '1') {
+      return false;
+    }
+    if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1') return true;
+    try {
+      if (fs.existsSync(configPath)) {
+        const json = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        return Boolean(json.enableRemoteTitleTranslation);
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function saveTitleTranslateConfig(enabled) {
+    try {
+      const dir = path.dirname(configPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      let current = {};
+      if (fs.existsSync(configPath)) {
+        current = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      }
+      current.enableRemoteTitleTranslation = Boolean(enabled);
+      fs.writeFileSync(configPath, JSON.stringify(current, null, 2), 'utf8');
+      process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION = enabled ? '1' : '0';
+    } catch (_) {}
+  }
+
   // 注册主进程翻译 API 桥接
   if (electron.ipcMain && !electron.ipcMain.__agyTitleApiBridgeRegistered) {
     electron.ipcMain.__agyTitleApiBridgeRegistered = true;
     const callTimes = [];
     electron.ipcMain.handle('agy-translate-title', async (event, text) => {
-      if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION !== '1') return text;
+      if (!isTitleTranslateConfigEnabled()) return text;
       const senderUrl = event?.senderFrame?.url || '';
       const isInternal =
         senderUrl.startsWith('file://') ||
@@ -618,8 +648,34 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       wc.executeJavaScript(getTitleCacheInjection() + code, true).catch(() => {});
     };
 
-    wc.on('dom-ready', runInjectImmediate);
-    wc.on('did-finish-load', runInjectImmediate);
+    wc.on('console-message', (_event, _level, message) => {
+      if (typeof message === 'string' && message.startsWith('__AGY_CONFIG_SYNC__:')) {
+        try {
+          const data = JSON.parse(message.slice('__AGY_CONFIG_SYNC__:'.length));
+          if (typeof data.enableRemoteTitleTranslation !== 'undefined') {
+            saveTitleTranslateConfig(data.enableRemoteTitleTranslation);
+          }
+        } catch (_) {}
+      }
+    });
+
+    const syncInitialConfig = () => {
+      if (wc.isDestroyed()) return;
+      const enabled = isTitleTranslateConfigEnabled();
+      wc.executeJavaScript(
+        `try{window.__AGY_I18N__&&window.__AGY_I18N__.syncConfigFromMain(${enabled});}catch(_){}`,
+        true
+      ).catch(() => {});
+    };
+
+    wc.on('dom-ready', () => {
+      runInjectImmediate();
+      syncInitialConfig();
+    });
+    wc.on('did-finish-load', () => {
+      runInjectImmediate();
+      syncInitialConfig();
+    });
     wc.on('did-navigate-in-page', () => {
       if (wc.isDestroyed()) return;
       wc.executeJavaScript('try{if(!window.__AGY_I18N__){' + getRuntimeScript() + '}}catch(_){}', true).catch(() => {});

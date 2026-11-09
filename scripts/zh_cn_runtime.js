@@ -5878,6 +5878,9 @@
           record.translated = null;
           state.translatedNodes.delete(node);
         }
+        if (typeof maybeTranslateTitleAsync === 'function') {
+          maybeTranslateTitleAsync(record.orig, node);
+        }
       }
     } else {
       const record = state.nodeMap.get(node);
@@ -6030,18 +6033,173 @@
     }
   }
 
+    const TITLE_TRANS_STORAGE_KEY = '__agy_enable_remote_title_trans__';
+  const TITLE_CACHE_STORAGE_KEY = '__agy_title_cache_store__';
+
+  try {
+    const localStore = window.localStorage.getItem(TITLE_CACHE_STORAGE_KEY);
+    if (localStore) {
+      window.__AGY_TITLE_CACHE__ = Object.assign(JSON.parse(localStore), window.__AGY_TITLE_CACHE__ || {});
+    }
+  } catch (_) {}
+
+  function isTitleTranslationEnabled() {
+    try {
+      return window.localStorage.getItem(TITLE_TRANS_STORAGE_KEY) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function setTitleTranslationEnabled(enabled) {
+    const val = enabled ? '1' : '0';
+    try {
+      window.localStorage.setItem(TITLE_TRANS_STORAGE_KEY, val);
+    } catch (_) {}
+    console.log('__AGY_CONFIG_SYNC__:' + JSON.stringify({ enableRemoteTitleTranslation: Boolean(enabled) }));
+    if (enabled && currentLang === 'zh-CN') {
+      walkAndTranslate(document.body);
+    }
+  }
+
+  const titleTranslatingSet = new Set();
+  async function maybeTranslateTitleAsync(rawText, node) {
+    if (!isTitleTranslationEnabled() || currentLang !== 'zh-CN') return;
+    if (!rawText || typeof rawText !== 'string') return;
+    const s = rawText.trim();
+    if (s.length < 3 || s.length > 80 || titleTranslatingSet.has(s)) return;
+    if (!/^[A-Za-z0-9][A-Za-z0-9\s\-_:,.!?()'/]+$/.test(s)) return;
+    if (!/[a-zA-Z]{3,}/.test(s)) return;
+    if (EXACT_MAP[s] || (window.__AGY_TITLE_CACHE__ && window.__AGY_TITLE_CACHE__[s])) return;
+
+    titleTranslatingSet.add(s);
+    try {
+      const res = await fetch('https://edge.microsoft.com/translate/translatetext?to=zh-Hans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([s])
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const trans = json?.[0]?.translations?.[0]?.text?.trim();
+        if (trans && trans !== s) {
+          window.__AGY_TITLE_CACHE__ = window.__AGY_TITLE_CACHE__ || {};
+          window.__AGY_TITLE_CACHE__[s] = trans;
+          try {
+            window.localStorage.setItem(TITLE_CACHE_STORAGE_KEY, JSON.stringify(window.__AGY_TITLE_CACHE__));
+          } catch (_) {}
+          if (node && node.parentNode && node.nodeValue && node.nodeValue.includes(s)) {
+            node.nodeValue = node.nodeValue.replace(s, trans);
+          }
+        }
+      }
+    } catch (_) {} finally {
+      titleTranslatingSet.delete(s);
+    }
+  }
+
+  let contextMenuEl = null;
+
+  function hideContextMenu() {
+    if (contextMenuEl && contextMenuEl.parentNode) {
+      contextMenuEl.parentNode.removeChild(contextMenuEl);
+      contextMenuEl = null;
+    }
+  }
+
+  function showContextMenu() {
+    if (contextMenuEl) {
+      hideContextMenu();
+      return;
+    }
+
+    const menu = document.createElement('div');
+    menu.id = 'agy-zh-cn-context-menu';
+    menu.setAttribute('translate', 'no');
+    menu.style.cssText = [
+      'position:fixed',
+      'bottom:34px',
+      'right:10px',
+      'z-index:2147483645',
+      'min-width:195px',
+      'padding:8px 10px',
+      'border-radius:6px',
+      'border:1px solid rgba(255,255,255,0.14)',
+      'background:rgba(26,28,32,0.96)',
+      'box-shadow:0 8px 24px rgba(0,0,0,0.55)',
+      'backdrop-filter:blur(12px)',
+      '-webkit-backdrop-filter:blur(12px)',
+      'color:#e2e4e9',
+      'font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif',
+      'font-size:11px',
+      'line-height:1.4',
+      'user-select:none',
+      'pointer-events:auto'
+    ].join(';');
+
+    const label = document.createElement('label');
+    label.style.cssText = [
+      'display:flex',
+      'align-items:center',
+      'gap:6px',
+      'cursor:pointer',
+      'font-size:11px',
+      'font-weight:500'
+    ].join(';');
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = isTitleTranslationEnabled();
+    checkbox.style.cssText = [
+      'cursor:pointer',
+      'accent-color:#3b82f6',
+      'width:13px',
+      'height:13px',
+      'margin:0'
+    ].join(';');
+
+    checkbox.addEventListener('change', () => {
+      setTitleTranslationEnabled(checkbox.checked);
+    });
+
+    const span = document.createElement('span');
+    span.textContent = '联网翻译历史会话标题';
+
+    label.appendChild(checkbox);
+    label.appendChild(span);
+
+    const desc = document.createElement('div');
+    desc.style.cssText = 'font-size:10px;color:#8f949f;margin-top:4px;padding-left:19px;line-height:1.3;';
+    desc.textContent = '展示层实时在线汉化（安全零改写本地数据库）';
+
+    menu.appendChild(label);
+    menu.appendChild(desc);
+
+    menu.addEventListener('click', (e) => e.stopPropagation());
+    menu.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    document.body.appendChild(menu);
+    contextMenuEl = menu;
+  }
+
   function updateToggleBadge() {
     const btn = document.getElementById('agy-zh-cn-toggle-btn');
     if (btn) {
       btn.textContent = currentLang === 'zh-CN' ? '中文' : 'EN';
       btn.title = currentLang === 'zh-CN'
-        ? '当前界面：简体中文（点击切换英文）'
-        : 'Current UI: English (Click to switch to Chinese)';
+        ? '当前界面：简体中文（左键切换语言，右键设置菜单）'
+        : 'Current UI: English (Left-click toggle, right-click settings)';
     }
   }
 
   function mountToggleBadge() {
-    if (document.getElementById('agy-zh-cn-toggle-bar')) return;
+    const existing = document.getElementById('agy-zh-cn-toggle-bar');
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
     if (!document.body) return;
 
     const bar = document.createElement('div');
@@ -6081,6 +6239,24 @@
       window.__AGY_I18N__.toggle();
     });
 
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showContextMenu();
+    });
+
+    bar.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showContextMenu();
+    });
+
+    if (!window.__agyToggleClickAttached) {
+      window.__agyToggleClickAttached = true;
+      document.addEventListener('click', () => hideContextMenu(), { capture: true });
+      window.addEventListener('blur', () => hideContextMenu());
+    }
+
     bar.appendChild(btn);
     document.body.appendChild(bar);
     updateToggleBadge();
@@ -6103,6 +6279,18 @@
 
   window.__AGY_I18N__ = {
     version: '1.2.1',
+    isTitleTranslationEnabled,
+    showContextMenu,
+    hideContextMenu,
+    setTitleTranslationEnabled,
+    syncConfigFromMain: (enabled) => {
+      if (typeof enabled === 'boolean') {
+        const stored = window.localStorage.getItem(TITLE_TRANS_STORAGE_KEY);
+        if (stored === null) {
+          window.localStorage.setItem(TITLE_TRANS_STORAGE_KEY, enabled ? '1' : '0');
+        }
+      }
+    },
     getLanguage: () => currentLang,
     setLanguage,
     toggle: () => setLanguage(currentLang === 'zh-CN' ? 'en-US' : 'zh-CN'),

@@ -88,6 +88,7 @@ async function main() {
   const filesToClean = [
     path.join(antigravityRoot, 'title_api_cache.json'),
     path.join(antigravityRoot, 'historical_titles_backup.json'),
+    path.join(antigravityRoot, 'translation_config.json'),
     path.join(os.tmpdir(), 'agy_zh_cn_session_hook_throttle.timestamp')
   ];
 
