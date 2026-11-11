@@ -4692,6 +4692,19 @@
     'conversations': '对话'
   };
 
+  const ACTION_TARGET_MAP = {
+    file: '文件',
+    files: '文件',
+    artifact: '工件',
+    artifacts: '工件'
+  };
+
+  function formatActionWithTarget(verbZh, target) {
+    const trimmed = String(target || '').trim();
+    const mapped = ACTION_TARGET_MAP[trimmed.toLowerCase()];
+    return mapped ? `${verbZh}${mapped}` : `${verbZh} ${trimmed}`;
+  }
+
   const REGEX_RULES = [
     [
       /^(?:Ran|ran)\s+(\d+)\s+commands?$/i,
@@ -4715,11 +4728,11 @@
     ],
     [
       /^Explored\s+(.+)$/i,
-      (_m, target) => `已探索 ${target}`
+      (_m, target) => formatActionWithTarget('已探索', target)
     ],
     [
       /^(?:Edited|edited)\s+(.+)$/i,
-      (_m, target) => `已编辑 ${target}`
+      (_m, target) => formatActionWithTarget('已编辑', target)
     ],
     [
       /^(?:Created|created)\s+(.+)$/i,
@@ -5368,6 +5381,8 @@
     ],
     [/^View\s+(\d+)\s+side\s+questions?$/i, '查看 $1 个侧边提问'],
     [/^(\d+)\s+side\s+questions?$/i, '$1 个侧边提问'],
+    [/^(\d+)\s+questions?$/i, '$1 个提问'],
+    [/^\+?(\d+)\s+more\s+lines?$/i, '展开另外 $1 行'],
     [/^Skip \(([^)]+)\),\s*Skip All \(([^)]+)\)$/i, '跳过 ($1)，全部跳过 ($2)'],
     [/^Continue \(([^)]+)\)$/i, '继续 ($1)'],
     [/^Submit \(([^)]+)\)$/i, '提交 ($1)']
@@ -5435,13 +5450,11 @@
     if ((m = seg.match(/^(?:Ran|ran)\s+(\d+)\s+commands?$/i))) return `已执行 ${m[1]} 个命令`;
     if (/^(?:Ran|ran)\s+commands?$/i.test(seg)) return '已执行命令';
     if ((m = seg.match(/^Explored\s+(.+)$/i))) {
-      const t = m[1].toLowerCase() === 'files' ? '文件' : m[1];
-      return `已探索 ${t}`;
+      return formatActionWithTarget('已探索', m[1]);
     }
     if (/^Explored$/i.test(seg)) return '已探索';
     if ((m = seg.match(/^(?:Edited|edited)\s+(.+)$/i))) {
-      const t = m[1].toLowerCase() === 'files' ? '文件' : (m[1].toLowerCase() === 'artifacts' ? '工件' : m[1]);
-      return `已编辑 ${t}`;
+      return formatActionWithTarget('已编辑', m[1]);
     }
     if (/^(?:Edited|edited)$/i.test(seg)) return '已编辑';
     if ((m = seg.match(/^(?:Created|created)\s+(.+)$/i))) return `已创建 ${m[1]}`;
