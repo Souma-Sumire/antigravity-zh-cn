@@ -127,6 +127,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     'Copy Link Address': '复制链接地址',
     'Copy Image': '复制图片',
     'Open in': '打开方式',
+    'Open In': '打开方式',
     'Open in Side Panel': '在侧边面板中打开',
     'Open in External Browser': '在外部浏览器中打开',
     'Open in New Tab': '在新标签页中打开',
