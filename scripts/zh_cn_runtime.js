@@ -2164,11 +2164,17 @@
     "Side Question": "侧边提问",
     "side question": "侧边提问",
     "Side question": "侧边提问",
+    "Side Questions": "侧边提问",
+    "side questions": "侧边提问",
+    "Side questions": "侧边提问",
     "Side question answered.": "侧边提问已回答。",
     "Side question answered": "侧边提问已回答",
     "View side question": "查看侧边提问",
+    "View side questions": "查看侧边提问",
     "Minimize side question": "最小化侧边提问",
+    "Minimize side questions": "最小化侧边提问",
     "Delete side question": "删除侧边提问",
+    "Delete side questions": "删除侧边提问",
     "Cancel questionnaire": "取消问卷",
     "Cancel questionnaire and stop the agent": "取消问答并停止 Agent",
     "Amend": "修改提交",
@@ -5352,7 +5358,9 @@
         const map = { projects: '项目', workspaces: '工作区', conversations: '对话' };
         return `${map[s.toLowerCase()] || s} (已归档)`;
       }
-    ]
+    ],
+    [/^View\s+(\d+)\s+side\s+questions?$/i, '查看 $1 个侧边提问'],
+    [/^(\d+)\s+side\s+questions?$/i, '$1 个侧边提问']
   ];
 
   const MONTH_NAMES = {
