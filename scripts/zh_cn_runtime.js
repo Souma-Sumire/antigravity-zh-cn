@@ -5755,9 +5755,10 @@
     );
   }
 
-  function shouldSkipElement(el) {
+  function shouldSkipElement(el, options) {
     if (!el || el.nodeType !== 1) return true;
-    if (SKIP_TAGS.has(el.tagName)) return true;
+    const allowTextareaAttr = Boolean(options && options.allowTextareaAttr && el.tagName === 'TEXTAREA');
+    if (SKIP_TAGS.has(el.tagName) && !allowTextareaAttr) return true;
     if (el.id === 'agy-zh-cn-toggle-bar') return true;
     if (
       el.isContentEditable ||
@@ -5933,7 +5934,7 @@
 
   function processAttributes(el) {
     if (!el || el.nodeType !== 1 || el.id === 'agy-zh-cn-toggle-bar') return;
-    if (shouldSkipElement(el)) return;
+    if (shouldSkipElement(el, { allowTextareaAttr: true })) return;
     for (let i = 0; i < ATTR_LIST.length; i++) {
       const attr = ATTR_LIST[i];
       const val = el.getAttribute(attr);
@@ -5982,6 +5983,10 @@
     }
     if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
     if (root.nodeType === 1) {
+      if (root.tagName === 'TEXTAREA') {
+        processAttributes(root);
+        return;
+      }
       if (shouldSkipElement(root)) return;
       processAttributes(root);
     }
@@ -6004,6 +6009,10 @@
               return NodeFilter.FILTER_ACCEPT;
             }
             if (node.closest && node.closest(SKIP_CLOSEST_SELECTOR)) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            if (node.tagName === 'TEXTAREA') {
+              processAttributes(node);
               return NodeFilter.FILTER_REJECT;
             }
             if (shouldSkipElement(node)) {
