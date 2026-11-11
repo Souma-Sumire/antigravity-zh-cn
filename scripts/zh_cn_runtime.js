@@ -1358,6 +1358,8 @@
     "Any error messages": "相关报错信息",
     "Steps to Reproduce": "复现步骤",
     "Submit": "提交",
+    "Submit (\u21b5)": "提交 (\u21b5)",
+    "Submit (Enter)": "提交 (Enter)",
     "Describe the bug you encountered...": "请描述您遇到的问题...",
     "Please list the steps to reproduce the issue": "请列出复现该问题的具体步骤",
     "Manage your notification preferences.": "管理您的通知偏好设置。",
@@ -3780,6 +3782,8 @@
     "File attachment": "文件附件",
     "Text Selection": "文本选区",
     "Continue": "继续",
+    "Continue (\u21b5)": "继续 (\u21b5)",
+    "Continue (Enter)": "继续 (Enter)",
     "Accept and continue": "接受并继续",
     "Next": "下一步",
     "Previous": "上一步",
@@ -4055,6 +4059,9 @@
     "Cancel Task": "取消任务",
     "Cancel Questionnaire and Stop the Agent": "取消问卷并停止 Agent",
     "Skip": "跳过",
+    "Skip All": "全部跳过",
+    "Skip (Esc), Skip All (Ctrl+Esc)": "跳过 (Esc)，全部跳过 (Ctrl+Esc)",
+    "Skip (Esc), Skip All (\u2318Esc)": "跳过 (Esc)，全部跳过 (\u2318Esc)",
     "Skipped": "已跳过",
     "Skipping...": "正在跳过...",
     "Submitting...": "正在提交...",
@@ -5360,7 +5367,10 @@
       }
     ],
     [/^View\s+(\d+)\s+side\s+questions?$/i, '查看 $1 个侧边提问'],
-    [/^(\d+)\s+side\s+questions?$/i, '$1 个侧边提问']
+    [/^(\d+)\s+side\s+questions?$/i, '$1 个侧边提问'],
+    [/^Skip \(([^)]+)\),\s*Skip All \(([^)]+)\)$/i, '跳过 ($1)，全部跳过 ($2)'],
+    [/^Continue \(([^)]+)\)$/i, '继续 ($1)'],
+    [/^Submit \(([^)]+)\)$/i, '提交 ($1)']
   ];
 
   const MONTH_NAMES = {
