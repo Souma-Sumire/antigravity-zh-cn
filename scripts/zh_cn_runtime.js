@@ -411,8 +411,16 @@
     "Search Workspaces...": "搜索工作区...",
     "Search Cloud…": "搜索云端项目…",
     "Search Cloud...": "搜索云端项目...",
+    "Search Remote…": "搜索远程…",
+    "Search Remote...": "搜索远程...",
+    "Remote Projects": "远程项目",
+    "Loading Repositories…": "正在加载仓库…",
+    "Loading Repositories...": "正在加载仓库...",
     "No matching projects": "无匹配的项目",
     "No matching workspaces": "无匹配的工作区",
+    "No remote projects": "暂无远程项目",
+    "No remote workspaces": "暂无远程工作区",
+    "No projects found": "未找到项目",
     "No matching ": "无匹配的",
     "Business": "商务与业务",
     "Payments, CRM, accounting, data, identity, customer support, marketing, and workflow automation.": "支付、CRM、财务会计、数据、身份认证、客户支持、营销与工作流自动化。",
@@ -4989,8 +4997,20 @@
       '搜索云端项目…'
     ],
     [
+      /^Search Remote(?:\.{3}|\u2026)?$/i,
+      '搜索远程…'
+    ],
+    [
+      /^Loading Repositories(?:\.{3}|\u2026)?$/i,
+      '正在加载仓库…'
+    ],
+    [
       /^No matching\s+(.+)$/i,
       (_m, s) => `无匹配的${s.toLowerCase() === 'projects' ? '项目' : s.toLowerCase() === 'workspaces' ? '工作区' : s}`
+    ],
+    [
+      /^No remote\s+(.+)$/i,
+      (_m, s) => `暂无远程${s.toLowerCase() === 'projects' ? '项目' : s.toLowerCase() === 'workspaces' ? '工作区' : s}`
     ],
     [
       /^in the top left\.?$/i,
