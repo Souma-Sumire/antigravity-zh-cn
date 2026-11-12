@@ -5701,22 +5701,36 @@
   }
 
   const SKIP_TAGS = new Set([
-    'PRE', 'CODE', 'SCRIPT', 'STYLE', 'TEXTAREA', 'SVG', 'MATH', 'NOSCRIPT', 'CANVAS'
+    'PRE', 'CODE', 'KBD', 'SAMP', 'SCRIPT', 'STYLE', 'TEXTAREA', 'SVG', 'MATH', 'NOSCRIPT', 'CANVAS'
   ]);
 
-  const SKIP_CLOSEST_SELECTOR = [
+  const SKIP_CODE_SELECTOR = [
     'pre',
     'code',
+    'kbd',
+    'samp',
     '.monaco-editor',
+    '.cm-editor',
+    '.cm-content',
+    '.code-block',
+    '.code-line',
+    '.line-content',
+    '.prism-code',
+    '.shiki',
+    '.hljs',
     '.xterm',
     '.katex',
+    '#agy-zh-cn-toggle-bar'
+  ].join(', ');
+
+  const SKIP_CLOSEST_SELECTOR = [
+    SKIP_CODE_SELECTOR,
     '[data-lexical-editor="true"]',
     '[contenteditable="true"]',
     '[data-markdown-root]',
     '[data-testid="user-message-bubble"]',
     '[data-testid="user-message-media-scroll"]',
     '[data-testid="user-message-content"]',
-    '#agy-zh-cn-toggle-bar',
     '[data-testid="project-header"]',
     '[data-testid*="project-header"]',
     '[data-testid="sidebar-project-header"]',
@@ -5791,7 +5805,7 @@
 
     const isToastOrNotification = isToastOrNotificationElement(el);
     if (isToastOrNotification) {
-      if (el.closest('pre, code, .monaco-editor, .xterm, .katex, #agy-zh-cn-toggle-bar')) {
+      if (el.closest(SKIP_CODE_SELECTOR)) {
         return true;
       }
       if (isIconElement(el)) {
@@ -6021,7 +6035,7 @@
             const inToast = isToastOrNotificationElement(node);
             const inToolbar = isActionToolbarElement(node);
             if (inToast || inToolbar) {
-              if (node.closest('pre, code, .monaco-editor, .xterm, .katex, #agy-zh-cn-toggle-bar')) {
+              if (node.closest(SKIP_CODE_SELECTOR)) {
                 return NodeFilter.FILTER_REJECT;
               }
               if (isIconElement(node)) {
