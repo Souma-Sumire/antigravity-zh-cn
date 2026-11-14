@@ -3869,6 +3869,14 @@
     "Agent sound playback blocked.": "Agent 语音播放被阻止。",
     "Start Voice Recording": "开始语音录制",
     "Start Live Chat": "开始实时对话",
+    "Start Voice mode": "开始语音模式",
+    "Start Voice Mode": "开始语音模式",
+    "End Voice mode": "结束语音模式",
+    "End Voice Mode": "结束语音模式",
+    "End Live chat": "结束实时对话",
+    "End Live Chat": "结束实时对话",
+    "Voice mode in progress": "语音模式进行中",
+    "Live chat in progress": "实时对话进行中",
     "The voice Jetski speaks with.": "Agent 发音的声音风格。",
     "Next voice": "下一个发音",
     "Previous voice": "上一个发音",
@@ -5427,6 +5435,7 @@
     [/^(.+?)\s+is only available to\s+(.+?)\s+plan subscribers(\.?)$/i, (_m, model, plan, dot) => `${model} 仅面向 ${plan} 方案订阅用户提供${dot ? '。' : ''}`],
     [/^All changes since the branch point(\.?)$/i, (_m, dot) => `自分支起点以来的所有更改${dot ? '。' : ''}`],
     [/^All changes since\s+(.+?)(\.?)$/i, (_m, target, dot) => `自 ${target} 以来的所有更改${dot ? '。' : ''}`],
+    [/^(?:Start|stop|end)\s+Voice\s+mode(\b.*)$/i, (m) => m.toLowerCase().startsWith('start') ? '开始语音模式' : '结束语音模式'],
     [
       /^(.+?)\s*\((low|medium|high|extra|xhigh|max)(?:\s+thinking)?\)$/i,
       (_m, model, level) => {
