@@ -1,6 +1,31 @@
 (function () {
   'use strict';
 
+  function isAllowedLocalizationContext() {
+    try {
+      const loc = globalThis.location;
+      if (!loc || !loc.protocol) return true;
+      const protocol = String(loc.protocol).toLowerCase();
+      if (
+        protocol === 'file:' ||
+        protocol === 'vscode-file:' ||
+        protocol === 'vscode-webview:' ||
+        protocol === 'plugin:' ||
+        protocol === 'about:'
+      ) {
+        return true;
+      }
+      if (protocol === 'http:' || protocol === 'https:') {
+        const host = String(loc.hostname || '').toLowerCase();
+        return host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1' || host.endsWith('.localhost');
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+  if (!isAllowedLocalizationContext()) return;
+
   const STORAGE_KEY = 'antigravity.ui.locale';
   let currentLang = 'zh-CN';
   try {
@@ -27,6 +52,48 @@
   const EXACT_MAP = {
     "Antigravity": "Antigravity",
     "antigravity": "antigravity",
+    "No items found": "未找到项",
+    "Something went wrong!": "出错了！",
+    "Open Editor": "打开编辑器",
+    "Search by name": "按名称搜索",
+    "Type to search...": "输入以搜索...",
+    "Editor Window": "编辑器窗口",
+    "Description:": "描述：",
+    "Artifact Name": "产物名称",
+    "Encountered an error": "遇到错误",
+    "Error Details": "错误详情",
+    "An error was thrown.": "抛出了一个错误。",
+    "Allow reading this URL?": "是否允许读取此 URL？",
+    "(tell the agent what to do instead)": "（告诉 Agent 改做什么）",
+    "Yes, and always allow": "是，且始终允许",
+    "New Scheduled Task": "新建计划任务",
+    "Add Scheduled Task": "添加计划任务",
+    "Pending messages": "等待中的消息",
+    "Downloading Update": "正在下载更新",
+    "Failed to load conversation": "加载对话失败",
+    "Failed to load trajectory": "加载轨迹失败",
+    "Failed to read file content": "读取文件内容失败",
+    "Failed to approve execution": "批准执行失败",
+    "Failed to reject execution": "拒绝执行失败",
+    "Failed to approve file access": "批准文件访问失败",
+    "Failed to deny file access": "拒绝文件访问失败",
+    "Failed to save project": "保存项目失败",
+    "Error loading Browser recording": "加载浏览器录屏出错",
+    "Loading Browser recording...": "正在加载浏览器录屏...",
+    "Error rendering playback": "渲染回放出错",
+    "Error while editing": "编辑时出错",
+    "Error while editing notebook": "编辑 Notebook 时出错",
+    "Error while reading notebook": "读取 Notebook 时出错",
+    "Files to edit:": "待编辑文件：",
+    "Generated image preview": "生成图片预览",
+    "Multi-conversation view is not available": "多对话视图不可用",
+    "No events recorded.": "未记录任何事件。",
+    "Agent Script Command Configuration": "Agent 脚本命令配置",
+    "Agent will always ask to review in strict mode.": "严格模式下，Agent 始终会请求人工审核。",
+    "Auto-proceeded with": "已自动继续：",
+    "Check again": "重新检查",
+    "Commented on:": "评论于：",
+    "Did restarting the desktop app help?": "重启桌面端应用是否解决了问题？",
     "Introducing Remote Agents": "推出远程 Agent",
     "Introducing Gemini 4 Hydrogen": "推出 Gemini 4 Hydrogen",
     "Introducing Gemini 4 Carbon": "推出 Gemini 4 Carbon",
@@ -5685,8 +5752,11 @@
 
     const resetsInMatch = normalizedKey.match(/^(?:Resets|Refreshes|Will refresh) in (.+?)\.?$/i);
     if (resetsInMatch) {
-      const dur = translateDuration(resetsInMatch[1]);
-      return str.replace(trimmed, `将于 ${dur}后重置`);
+      const rawDur = resetsInMatch[1].trim();
+      const dur = translateDuration(rawDur);
+      if (dur && dur !== rawDur) {
+        return str.replace(trimmed, `将于 ${dur}后重置`);
+      }
     }
 
     if (normalizedKey.includes(',') && !normalizedKey.startsWith('http') && !normalizedKey.includes('\n')) {
@@ -5765,8 +5835,9 @@
     '[data-language]',
     '[data-syntax]',
     '[data-code-block]',
-    '[data-testid*="code"]',
-    '[data-testid*="terminal"]',
+    '.terminal',
+    '[data-testid="terminal-container"]',
+    '[data-testid="terminal-view"]',
     '#agy-zh-cn-toggle-bar'
   ].join(', ');
 
@@ -5774,10 +5845,23 @@
     SKIP_CODE_SELECTOR,
     '[data-lexical-editor="true"]',
     '[contenteditable="true"]',
+    '[contenteditable="plaintext-only"]',
+    '[contenteditable=""]',
     '[data-markdown-root]',
+    '[data-file-uri]',
+    '[data-uri]',
+    '[data-quotable-inline="true"]',
+    '[data-quotable="true"]',
+    '[class*="diffEditor"]',
+    '[aria-label="File Viewer"]',
+    '[aria-label="文件查看器"]',
     '[data-testid="user-message-bubble"]',
     '[data-testid="user-message-media-scroll"]',
     '[data-testid="user-message-content"]',
+    '[data-testid="user-input-step"] .whitespace-pre-wrap',
+    '[data-testid="planner-response-text"]',
+    '[data-testid="entity-pill"]',
+    '[data-testid="file-title-name"]',
     '[data-testid="project-header"]',
     '[data-testid*="project-header"]',
     '[data-testid="sidebar-project-header"]',
@@ -5845,7 +5929,21 @@
     if (
       el.isContentEditable ||
       el.getAttribute('contenteditable') === 'true' ||
+      el.getAttribute('contenteditable') === 'plaintext-only' ||
+      el.getAttribute('contenteditable') === '' ||
       el.getAttribute('data-lexical-editor') === 'true'
+    ) {
+      return true;
+    }
+
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    if (
+      active &&
+      (active.isContentEditable ||
+        active.tagName === 'INPUT' ||
+        active.tagName === 'TEXTAREA' ||
+        (active.getAttribute && active.getAttribute('data-lexical-editor') === 'true')) &&
+      (active === el || (typeof active.contains === 'function' && active.contains(el)))
     ) {
       return true;
     }
@@ -5890,6 +5988,10 @@
     if (isIconElement(el)) {
       return true;
     }
+    const root = typeof el.getRootNode === 'function' ? el.getRootNode() : null;
+    if (root && root.host && shouldSkipElement(root.host, options)) {
+      return true;
+    }
     return false;
   }
 
@@ -5930,9 +6032,25 @@
     }
     return false;
   }
+  function isModelMenuBadgeContext(el) {
+    if (!el || typeof el.closest !== 'function') return false;
+    const menu = el.closest('[role="menu"]');
+    if (!menu) return false;
+    const directLabel = menu.getAttribute('aria-label') || '';
+    if (/select model|选择模型/i.test(directLabel)) return true;
+    const labelledBy = menu.getAttribute('aria-labelledby');
+    if (labelledBy && typeof document !== 'undefined') {
+      const labelEl = document.getElementById(labelledBy);
+      const refText = labelEl ? ((labelEl.getAttribute('aria-label') || '') + ' ' + (labelEl.textContent || '')) : '';
+      if (/select model|选择模型/i.test(refText)) return true;
+    }
+    return false;
+  }
+
   function processTextNode(node) {
     const parent = node.parentElement;
     if (!parent) return;
+    if (parent.tagName === 'OPTION' && !parent.hasAttribute('value')) return;
 
     if (shouldSkipElement(parent)) {
       const record = state.nodeMap.get(node);
@@ -5974,7 +6092,9 @@
       }
       if (record.orig.trim() === 'New' || record.orig.trim() === 'new') {
         const isBadge = Boolean(parent.closest && parent.closest('[data-testid*="badge"], .rounded-full'));
-        if (!isBadge) {
+        if (isBadge || isModelMenuBadgeContext(parent)) {
+          translated = '新';
+        } else {
           const actionBtn = Boolean(
             parent.closest && parent.closest('[data-testid="sidecar-new-button"], button[aria-label*="Add"], button[aria-label*="Create"], button[aria-label*="New"]')
           );

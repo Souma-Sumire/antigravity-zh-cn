@@ -640,13 +640,60 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       return '';
     };
 
+    const isAllowedPageUrl = (rawUrl) => {
+      if (!rawUrl || rawUrl === 'about:blank' || rawUrl.startsWith('data:') || rawUrl.startsWith('devtools://')) {
+        return false;
+      }
+      try {
+        const u = new URL(rawUrl);
+        const proto = u.protocol.toLowerCase();
+        if (proto === 'file:' || proto === 'vscode-file:' || proto === 'vscode-webview:' || proto === 'plugin:') {
+          return true;
+        }
+        if (proto === 'http:' || proto === 'https:') {
+          const host = u.hostname.toLowerCase();
+          return host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1' || host.endsWith('.localhost');
+        }
+        return false;
+      } catch (_) {
+        return false;
+      }
+    };
+
     const runInjectImmediate = () => {
       if (wc.isDestroyed()) return;
       const url = wc.getURL ? wc.getURL() : '';
-      if (!url || url === 'about:blank' || url.startsWith('data:') || url.startsWith('devtools://')) return;
+      if (!isAllowedPageUrl(url)) return;
       const code = getRuntimeScript();
       if (!code) return;
       wc.executeJavaScript(getTitleCacheInjection() + code, true).catch(() => {});
+    };
+
+    const resolveSubframe = (event, frameProcessId, frameRoutingId) => {
+      if (event && event.frame) return event.frame;
+      if (typeof frameProcessId === 'number' && typeof frameRoutingId === 'number' && electron.webFrameMain && typeof electron.webFrameMain.fromId === 'function') {
+        return electron.webFrameMain.fromId(frameProcessId, frameRoutingId) || null;
+      }
+      return null;
+    };
+
+    const injectSidecarSubframe = (frame) => {
+      try {
+        if (!frame || (frame.isDestroyed && frame.isDestroyed()) || wc.isDestroyed()) return;
+        const mainFrame = wc.mainFrame;
+        if (!mainFrame || frame === mainFrame || frame.parent !== mainFrame) return;
+        const frameUrl = String(frame.url || '');
+        if (!isAllowedPageUrl(frameUrl) || !/^https?:/i.test(frameUrl)) return;
+        const code = getRuntimeScript();
+        if (!code) return;
+        const checkExpr = '(function(u){try{var t=new URL(u),els=document.querySelectorAll(\'iframe[data-testid="sidecar-iframe"]\');for(var i=0;i<els.length;i++){var raw=els[i].getAttribute(\'src\')||els[i].src||\'\';if(!raw)continue;var s=new URL(raw,location.href);if(s.origin===t.origin)return true;}}catch(_){}return false;})(' + JSON.stringify(frameUrl) + ')';
+        Promise.resolve(mainFrame.executeJavaScript(checkExpr))
+          .then((isSidecar) => {
+            if (!isSidecar || (frame.isDestroyed && frame.isDestroyed()) || wc.isDestroyed()) return;
+            return frame.executeJavaScript(getTitleCacheInjection() + code);
+          })
+          .catch(() => {});
+      } catch (_) {}
     };
 
     wc.on('console-message', (_event, _level, message) => {
@@ -679,7 +726,17 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     });
     wc.on('did-navigate-in-page', () => {
       if (wc.isDestroyed()) return;
+      const url = wc.getURL ? wc.getURL() : '';
+      if (!isAllowedPageUrl(url)) return;
       wc.executeJavaScript('try{if(!window.__AGY_I18N__){' + getRuntimeScript() + '}}catch(_){}', true).catch(() => {});
+    });
+    wc.on('did-frame-navigate', (event, _url, _code, _status, isMainFrame, frameProcessId, frameRoutingId) => {
+      if (isMainFrame) return;
+      injectSidecarSubframe(resolveSubframe(event, frameProcessId, frameRoutingId));
+    });
+    wc.on('did-frame-finish-load', (event, isMainFrame, frameProcessId, frameRoutingId) => {
+      if (isMainFrame) return;
+      injectSidecarSubframe(resolveSubframe(event, frameProcessId, frameRoutingId));
     });
   }
 
