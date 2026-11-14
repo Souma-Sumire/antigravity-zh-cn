@@ -5739,14 +5739,25 @@
     '.monaco-editor',
     '.cm-editor',
     '.cm-content',
+    '.cm-line',
     '.code-block',
     '.code-line',
     '.line-content',
+    '.code-snippet',
     '.prism-code',
     '.shiki',
     '.hljs',
     '.xterm',
     '.katex',
+    '.font-mono',
+    '[class*="font-mono"]',
+    '[class*="language-"]',
+    '[class*="token"]',
+    '[data-language]',
+    '[data-syntax]',
+    '[data-code-block]',
+    '[data-testid*="code"]',
+    '[data-testid*="terminal"]',
     '#agy-zh-cn-toggle-bar'
   ].join(', ');
 
@@ -5857,6 +5868,15 @@
     }
     if (el.closest && el.closest(SKIP_CLOSEST_SELECTOR)) {
       return true;
+    }
+    const className = typeof el.className === 'string' ? el.className : (el.getAttribute && el.getAttribute('class')) || '';
+    if (/\b(?:font-mono|code-block|code-line|code-snippet|prism-code|hljs)\b/i.test(className)) {
+      return true;
+    }
+    if (el.style && (el.style.whiteSpace === 'pre' || el.style.whiteSpace === 'pre-wrap')) {
+      if (/\bfont-mono\b/i.test(className) || (el.closest && el.closest('.font-mono, [class*="font-mono"]'))) {
+        return true;
+      }
     }
     if (isIconElement(el)) {
       return true;
