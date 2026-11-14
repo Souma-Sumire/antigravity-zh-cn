@@ -28,6 +28,15 @@
     "Antigravity": "Antigravity",
     "antigravity": "antigravity",
     "Introducing Remote Agents": "推出远程 Agent",
+    "Introducing Gemini 4 Hydrogen": "推出 Gemini 4 Hydrogen",
+    "Introducing Gemini 4 Carbon": "推出 Gemini 4 Carbon",
+    "Our daily driver for rapid coding and dependable agentic execution!": "适用于快速编码与可靠 Agent 执行的日常主力模型！",
+    "Our daily driver for rapid coding and dependable agentic execution": "适用于快速编码与可靠 Agent 执行的日常主力模型",
+    "Our daily driver for rapid coding and dependable agentic execution.": "适用于快速编码与可靠 Agent 执行的日常主力模型。",
+    "Gemini 4 Carbon is currently available to Ultra plan subscribers.": "Gemini 4 Carbon 目前仅面向 Ultra 方案订阅用户提供。",
+    "Gemini 4 Carbon is currently available to Ultra plan subscribers": "Gemini 4 Carbon 目前仅面向 Ultra 方案订阅用户提供",
+    "Gemini 4 Hydrogen is currently available to Ultra plan subscribers.": "Gemini 4 Hydrogen 目前仅面向 Ultra 方案订阅用户提供。",
+    "Gemini 4 Hydrogen is currently available to Ultra plan subscribers": "Gemini 4 Hydrogen 目前仅面向 Ultra 方案订阅用户提供",
     "Your agents can now run in the cloud and keep working after you close the app. Check on them from any browser at antigravity.google.com. Create a Remote Project to get started.": "您的 Agent 现已可在云端运行，并在关闭应用后继续工作。可通过任意浏览器访问 antigravity.google.com 查看它们。创建远程项目即可开始。",
     "Your agents can now run in the cloud and keep working after you close the app. Check on them from any browser at antigravity.google.com. Create a Remote Project to get started": "您的 Agent 现已可在云端运行，并在关闭应用后继续工作。可通过任意浏览器访问 antigravity.google.com 查看它们。创建远程项目即可开始",
     "Your agents can now run in the cloud and keep working after you close the app.": "您的 Agent 现已可在云端运行，并在关闭应用后继续工作。",
@@ -5406,7 +5415,10 @@
     [/^Show\s+(\d+)\s+more(?:\.{3}|\u2026)$/i, '展开其余 $1 项...'],
     [/^Skip \(([^)]+)\),\s*Skip All \(([^)]+)\)$/i, '跳过 ($1)，全部跳过 ($2)'],
     [/^Continue \(([^)]+)\)$/i, '继续 ($1)'],
-    [/^Submit \(([^)]+)\)$/i, '提交 ($1)']
+    [/^Submit \(([^)]+)\)$/i, '提交 ($1)'],
+    [/^Introducing\s+(Gemini\s+.*)$/i, (_m, name) => `推出 ${name}`],
+    [/^(.+?)\s+is currently available to\s+(.+?)\s+plan subscribers(\.?)$/i, (_m, model, plan, dot) => `${model} 目前仅面向 ${plan} 方案订阅用户提供${dot ? '。' : ''}`],
+    [/^(.+?)\s+is only available to\s+(.+?)\s+plan subscribers(\.?)$/i, (_m, model, plan, dot) => `${model} 仅面向 ${plan} 方案订阅用户提供${dot ? '。' : ''}`]
   ];
 
   const MONTH_NAMES = {
