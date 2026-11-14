@@ -305,6 +305,8 @@
     "Diff contents are no longer available.": "Diff 差异内容已不再可用。",
     "Failed to load diff contents.": "加载 Diff 差异内容失败。",
     "Staged index changes and working tree changes": "暂存区更改与工作区更改",
+    "All changes since the branch point": "自分支起点以来的所有更改",
+    "All changes since the branch point.": "自分支起点以来的所有更改。",
     "No notebook cells were found.": "未找到 Notebook 代码单元格。",
     "Notebook execution not implemented": "尚未实现 Notebook 执行",
     "This notebook has no renderable cells.": "此 Notebook 没有可渲染的单元格。",
@@ -3338,6 +3340,10 @@
     "High": "高",
     "Medium": "中",
     "Low": "低",
+    "Extra": "极高",
+    "extra": "极高",
+    "Max": "最高",
+    "max": "最高",
     "Build applications with the Gemini Interactions API and Live API, including text, image, video, and speech generation, managed agents, and real-time multimodal streaming.": "借助 Gemini Interactions API 与 Live API 构建应用程序，涵盖文本、图像、视频与语音生成，托管 Agent 以及实时多模态流式交互。",
     "Build applications with the Gemini Interactions API and Live API": "借助 Gemini Interactions API 与 Live API 构建应用程序",
     "Download": "下载",
@@ -5418,7 +5424,16 @@
     [/^Submit \(([^)]+)\)$/i, '提交 ($1)'],
     [/^Introducing\s+(Gemini\s+.*)$/i, (_m, name) => `推出 ${name}`],
     [/^(.+?)\s+is currently available to\s+(.+?)\s+plan subscribers(\.?)$/i, (_m, model, plan, dot) => `${model} 目前仅面向 ${plan} 方案订阅用户提供${dot ? '。' : ''}`],
-    [/^(.+?)\s+is only available to\s+(.+?)\s+plan subscribers(\.?)$/i, (_m, model, plan, dot) => `${model} 仅面向 ${plan} 方案订阅用户提供${dot ? '。' : ''}`]
+    [/^(.+?)\s+is only available to\s+(.+?)\s+plan subscribers(\.?)$/i, (_m, model, plan, dot) => `${model} 仅面向 ${plan} 方案订阅用户提供${dot ? '。' : ''}`],
+    [/^All changes since the branch point(\.?)$/i, (_m, dot) => `自分支起点以来的所有更改${dot ? '。' : ''}`],
+    [/^All changes since\s+(.+?)(\.?)$/i, (_m, target, dot) => `自 ${target} 以来的所有更改${dot ? '。' : ''}`],
+    [
+      /^(.+?)\s*\((low|medium|high|extra|xhigh|max)(?:\s+thinking)?\)$/i,
+      (_m, model, level) => {
+        const map = { low: '低', medium: '中', high: '高', extra: '极高', xhigh: '极高', max: '最高' };
+        return `${model} (${map[level.toLowerCase()] || level})`;
+      }
+    ]
   ];
 
   const MONTH_NAMES = {
