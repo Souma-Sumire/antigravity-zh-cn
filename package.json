@@ -16,10 +16,13 @@
   },
   "keywords": [
     "antigravity",
+    "google-antigravity",
+    "antigravity-2.0",
     "i18n",
     "chinese",
     "zh-cn",
-    "localization"
+    "localization",
+    "plugin"
   ],
   "author": "Souma",
   "license": "MIT"
