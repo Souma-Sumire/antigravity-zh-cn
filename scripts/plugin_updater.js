@@ -8,7 +8,7 @@ const https = require('https');
 const tls = require('tls');
 const crypto = require('crypto');
 const { URL } = require('url');
-const { execFile } = require('child_process');
+const { execFile, execSync } = require('child_process');
 
 const DEFAULT_REPO_OWNER = 'Souma-Sumire';
 const DEFAULT_REPO_NAME = 'antigravity-zh-cn';
@@ -52,7 +52,7 @@ function getLocalVersion(pluginDir = DEFAULT_PLUGIN_DIR) {
 }
 
 function getProxyConfig() {
-  const envProxy =
+  let rawProxy =
     process.env.HTTPS_PROXY ||
     process.env.https_proxy ||
     process.env.HTTP_PROXY ||
@@ -60,12 +60,26 @@ function getProxyConfig() {
     process.env.ALL_PROXY ||
     process.env.all_proxy;
 
-  if (!envProxy) return null;
+  if (!rawProxy && process.platform === 'win32') {
+    try {
+      const regOut = execSync(
+        'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"',
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000, windowsHide: true }
+      );
+      const enableMatch = regOut.match(/ProxyEnable\s+REG_DWORD\s+0x([0-9a-fA-F]+)/);
+      const serverMatch = regOut.match(/ProxyServer\s+REG_SZ\s+([^\r\n]+)/);
+      if ((!enableMatch || parseInt(enableMatch[1], 16) !== 0) && serverMatch && serverMatch[1]) {
+        rawProxy = serverMatch[1].trim();
+      }
+    } catch (_) {}
+  }
+
+  if (!rawProxy) return null;
   try {
     const parsed = new URL(
-      envProxy.startsWith('http://') || envProxy.startsWith('https://') || envProxy.startsWith('socks5://')
-        ? envProxy
-        : `http://${envProxy}`
+      rawProxy.startsWith('http://') || rawProxy.startsWith('https://') || rawProxy.startsWith('socks5://')
+        ? rawProxy
+        : `http://${rawProxy}`
     );
     if (parsed.protocol === 'socks5:') return null;
     return {
@@ -334,7 +348,14 @@ async function performUpdate(options = {}) {
 
   try {
     if (isGitRepo) {
-      await execFileAsync('git', ['-C', pluginDir, 'pull', '--ff-only'], { timeout: 30000 });
+      const proxyCfg = getProxyConfig();
+      const gitArgs = ['-C', pluginDir];
+      if (proxyCfg) {
+        const proxyUrl = `http://${proxyCfg.host}:${proxyCfg.port}`;
+        gitArgs.push('-c', `http.proxy=${proxyUrl}`, '-c', `https.proxy=${proxyUrl}`);
+      }
+      gitArgs.push('pull', '--ff-only');
+      await execFileAsync('git', gitArgs, { timeout: 30000 });
     } else {
       const zipUrl = `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/${branch}`;
       const zipBuf = await fetchBuffer(zipUrl, options.timeoutMs || 30000);

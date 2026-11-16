@@ -89,9 +89,19 @@ async function main() {
     path.join(antigravityRoot, 'title_api_cache.json'),
     path.join(antigravityRoot, 'historical_titles_backup.json'),
     path.join(antigravityRoot, 'translation_config.json'),
-    path.join(os.tmpdir(), 'agy_zh_cn_session_hook_throttle.timestamp')
+    path.join(os.tmpdir(), 'agy_zh_cn_session_hook_throttle.timestamp'),
+    path.join(os.tmpdir(), 'agy_zh_cn_sidecar.pid')
   ];
 
+  const sidecarPidFile = path.join(os.tmpdir(), 'agy_zh_cn_sidecar.pid');
+  if (fs.existsSync(sidecarPidFile)) {
+    try {
+      const pid = parseInt(fs.readFileSync(sidecarPidFile, 'utf8').trim(), 10);
+      if (Number.isInteger(pid) && pid > 0) {
+        try { process.kill(pid, 'SIGTERM'); } catch (_) {}
+      }
+    } catch (_) {}
+  }
   const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
   const asarPendingPath = path.join(localAppData, 'Programs', 'antigravity', 'resources', 'app.asar.pending');
   filesToClean.push(asarPendingPath);

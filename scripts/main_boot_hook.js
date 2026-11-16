@@ -643,7 +643,84 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   getRuntimeScript();
 
   // 仅当检测到 pending 目录存在已下载的更新安装包、即将执行退出更新时，才派生一次性 60 秒短生命周期修补任务，平时零后台进程
-  // 遵照规范移除隐式后台轮询进程，零后台常驻
+  let postUpdateScheduled = false;
+  function resolveSystemNodeExe() {
+    const candidates = [
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'nodejs', 'node.exe'),
+      path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'nodejs', 'node.exe')
+    ];
+    const pathDirs = String(process.env.PATH || '').split(path.delimiter);
+    for (const dir of pathDirs) {
+      if (dir) candidates.push(path.join(dir.trim(), process.platform === 'win32' ? 'node.exe' : 'node'));
+    }
+    for (const p of candidates) {
+      try {
+        if (p && fs.existsSync(p)) return p;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  function scheduleOneShotPostUpdatePatchIfPending() {
+    if (postUpdateScheduled) return;
+    try {
+      const pendingDir = path.join(
+        process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
+        'antigravity-updater',
+        'pending'
+      );
+      if (!fs.existsSync(pendingDir)) return;
+      const files = fs.readdirSync(pendingDir);
+      const hasUpdatePayload = files.some((f) => f.endsWith('.exe') || f === 'update-info.json');
+      if (!hasUpdatePayload) return;
+
+      const installScript = path.join(pluginScriptsDir, 'install_boot_hook.js');
+      const injectScript = path.join(pluginScriptsDir, 'inject_live.js');
+      if (!fs.existsSync(installScript)) return;
+
+      const sysNode = resolveSystemNodeExe();
+      if (!sysNode) return;
+
+      postUpdateScheduled = true;
+      const oneShotCode = `
+        const fs = require('fs');
+        const { asarPath, isAsarPatched, install } = require(${JSON.stringify(installScript)});
+        const { injectLive } = require(${JSON.stringify(injectScript)});
+        let ticks = 0;
+        let busy = false;
+        const timer = setInterval(async () => {
+          if (busy) return;
+          ticks++;
+          if (ticks > 120) {
+            clearInterval(timer);
+            process.exit(0);
+          }
+          try {
+            if (fs.existsSync(asarPath) && fs.statSync(asarPath).size > 1000000 && !isAsarPatched(asarPath)) {
+              busy = true;
+              install(false);
+              if (isAsarPatched(asarPath)) {
+                clearInterval(timer);
+                try { await injectLive('apply', 25, 450); } catch (_) {}
+                process.exit(0);
+              }
+              busy = false;
+            }
+          } catch (_) {
+            busy = false;
+          }
+        }, 600);
+      `;
+
+      const child = spawn(sysNode, ['-e', oneShotCode], {
+        cwd: os.tmpdir(),
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      child.unref();
+    } catch (_) {}
+  }
 
 
   function injectIntoWebContents(wc) {
@@ -661,10 +738,10 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         if (fs.existsSync(cachePath)) {
           const cache = fs.readFileSync(cachePath, 'utf8');
           const safeJson = JSON.stringify(JSON.parse(cache));
-          return `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${safeJson});}catch(_){}\n`;
+          return `try{window.__AGY_MAIN_BOOT_HOOK_ACTIVE__=true;window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${safeJson});}catch(_){}\n`;
         }
       } catch (_) {}
-      return '';
+      return 'try{window.__AGY_MAIN_BOOT_HOOK_ACTIVE__=true;}catch(_){}\n';
     };
 
     const isAllowedPageUrl = (rawUrl) => {
@@ -835,6 +912,12 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   if (electron.app) {
     electron.app.on('web-contents-created', (_event, contents) => {
       injectIntoWebContents(contents);
+    });
+    electron.app.on('before-quit', () => {
+      scheduleOneShotPostUpdatePatchIfPending();
+    });
+    electron.app.on('will-quit', () => {
+      scheduleOneShotPostUpdatePatchIfPending();
     });
     electron.app.on('browser-window-created', (_event, win) => {
       if (win && win.webContents) {

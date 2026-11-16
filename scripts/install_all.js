@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const http = require('http');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 
 const targetPluginDir = path.join(os.homedir(), '.gemini', 'config', 'plugins', 'zh-cn-ui');
 
@@ -153,6 +153,19 @@ async function main() {
     console.warn('   Live injection warning:', err.message);
   }
 
+  const sidecarMain = path.join(targetPluginDir, 'sidecars', 'boot', 'main.mjs');
+  if (fs.existsSync(sidecarMain)) {
+    try {
+      const child = spawn(process.execPath, [sidecarMain], {
+        cwd: os.tmpdir(),
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+        env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' })
+      });
+      child.unref();
+    } catch (_) {}
+  }
   process.exit(0);
 }
 
