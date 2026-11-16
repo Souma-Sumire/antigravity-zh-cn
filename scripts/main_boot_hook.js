@@ -816,10 +816,10 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         const mainFrame = wc.mainFrame;
         if (!mainFrame || frame === mainFrame || frame.parent !== mainFrame) return;
         const frameUrl = String(frame.url || '');
-        if (!isAllowedPageUrl(frameUrl) || !/^https?:/i.test(frameUrl)) return;
+        if (!isAllowedPageUrl(frameUrl) || !/^(?:https?|plugin):/i.test(frameUrl)) return;
         const code = getRuntimeScript();
         if (!code) return;
-        const checkExpr = '(function(u){try{var t=new URL(u),els=document.querySelectorAll(\'iframe[data-testid="sidecar-iframe"]\');for(var i=0;i<els.length;i++){var raw=els[i].getAttribute(\'src\')||els[i].src||\'\';if(!raw)continue;var s=new URL(raw,location.href);if(s.origin===t.origin)return true;}}catch(_){}return false;})(' + JSON.stringify(frameUrl) + ')';
+        const checkExpr = '(function(u){try{var t=new URL(u),els=document.querySelectorAll(\'iframe[data-testid="sidecar-iframe"]\');for(var i=0;i<els.length;i++){var raw=els[i].getAttribute(\'src\')||els[i].src||\'\';if(!raw)continue;var s=new URL(raw,location.href);if(s.protocol===t.protocol&&s.host===t.host)return true;}}catch(_){}return false;})(' + JSON.stringify(frameUrl) + ')';
         Promise.resolve(mainFrame.executeJavaScript(checkExpr))
           .then((isSidecar) => {
             if (!isSidecar || (frame.isDestroyed && frame.isDestroyed()) || wc.isDestroyed()) return;

@@ -117,7 +117,7 @@ async function injectOnce(action = 'apply') {
   const targets = await httpGetJson(port, '/json/list');
   const pages = targets.filter(
     (t) =>
-      t.type === 'page' &&
+      (t.type === 'page' || (t.type === 'iframe' && String(t.url).startsWith('plugin://'))) &&
       t.webSocketDebuggerUrl &&
       t.url &&
       t.url !== 'about:blank' &&

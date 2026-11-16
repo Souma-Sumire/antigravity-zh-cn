@@ -214,6 +214,12 @@ class ZhCnSidecarBridge {
       ? code
       : `try{if(!window.__AGY_I18N__){${code}}}catch(_){}`;
     await this.evaluate(expr).catch(() => {});
+    try {
+      const { injectLive } = require(path.join(scriptsDir, 'inject_live.js'));
+      if (typeof injectLive === 'function') {
+        injectLive('apply', 1, 200).catch(() => {});
+      }
+    } catch (_) {}
   }
 
   async handleConsoleMessage(text) {
