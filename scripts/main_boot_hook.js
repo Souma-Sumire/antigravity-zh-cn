@@ -648,6 +648,8 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
 
   function injectIntoWebContents(wc) {
     if (!wc || wc.isDestroyed()) return;
+    if (wc.__agyZhCnInjected) return;
+    wc.__agyZhCnInjected = true;
     try {
       const type = typeof wc.getType === 'function' ? wc.getType() : 'window';
       if (type !== 'window') return;
