@@ -4681,6 +4681,7 @@
     "Archive Project": "归档项目",
     "Archive Folder": "归档文件夹",
     "Open in Cider": "在 Cider 中打开",
+    "No quota information available.": "暂无可用配额信息。",
     "Manifest Changes": "清单变更",
     "Live chat": "实时对话",
     "Live Chat": "实时对话",
@@ -6296,6 +6297,7 @@
   function translateDuration(s) {
     if (!s || typeof s !== 'string') return '';
     return s
+      .replace(/<\s*1\s*m\b/gi, '不到 1 分钟 ')
       .replace(/(\d+)\s*weeks?/gi, '$1 周 ')
       .replace(/(\d+)\s*days?/gi, '$1 天 ')
       .replace(/(\d+)\s*hours?/gi, '$1 小时 ')
@@ -6511,6 +6513,22 @@
     const errorIdMatch = normalizedKey.match(/^Error ID:\s*([a-zA-Z0-9-]+)$/i);
     if (errorIdMatch) {
       return str.replace(trimmed, `错误 ID: ${errorIdMatch[1]}`);
+    }
+
+    const limitWithResetsMatch = normalizedKey.match(
+      /^(weekly|daily|monthly|hourly|5-hour|five-hour|five hour|\d+\s*[smhdw])\s+limit(?:,\s*(?:resets|refreshes|will refresh) in\s+(.+?))?\.?$/i
+    );
+    if (limitWithResetsMatch) {
+      const rawPeriod = limitWithResetsMatch[1].trim();
+      const period = PERIOD_MAP[rawPeriod.toLowerCase()] || translateDuration(rawPeriod);
+      const rawDur = limitWithResetsMatch[2] ? limitWithResetsMatch[2].trim() : '';
+      if (rawDur) {
+        const dur = translateDuration(rawDur);
+        if (dur && dur !== rawDur) {
+          return str.replace(trimmed, `${period}限额，将于 ${dur}后重置`);
+        }
+      }
+      return str.replace(trimmed, `${period}限额`);
     }
 
     const resetsInMatch = normalizedKey.match(/^(?:Resets|Refreshes|Will refresh) in (.+?)\.?$/i);
@@ -7886,6 +7904,58 @@
     }
   }
 
+  function hookNativeContextMenuInRenderer() {
+    if (window.__AGY_CONTEXT_MENU_MAP_HOOKED__) return;
+    window.__AGY_CONTEXT_MENU_MAP_HOOKED__ = true;
+
+    let inContextMenuWindow = false;
+    let contextMenuTimer = null;
+    window.addEventListener(
+      'contextmenu',
+      () => {
+        inContextMenuWindow = true;
+        if (contextMenuTimer) clearTimeout(contextMenuTimer);
+        contextMenuTimer = setTimeout(() => {
+          inContextMenuWindow = false;
+        }, 80);
+      },
+      true
+    );
+
+    const origArrayMap = Array.prototype.map;
+    Array.prototype.map = function (callback, thisArg) {
+      const result = origArrayMap.call(this, callback, thisArg);
+      const i18n = window.__AGY_I18N__;
+      if (
+        inContextMenuWindow &&
+        i18n &&
+        typeof i18n.getLanguage === 'function' &&
+        i18n.getLanguage() === 'zh-CN' &&
+        Array.isArray(result) &&
+        result.length > 0 &&
+        result.length <= 50
+      ) {
+        for (let i = 0; i < result.length; i++) {
+          const item = result[i];
+          if (
+            item &&
+            typeof item === 'object' &&
+            typeof item.label === 'string' &&
+            item.label.trim() &&
+            ('id' in item || 'type' in item || 'accelerator' in item || 'enabled' in item || 'disabled' in item)
+          ) {
+            const trans = i18n.translate(item.label);
+            if (trans) {
+              item.label = trans;
+            }
+          }
+        }
+      }
+      return result;
+    };
+  }
+
   hookNotification();
+  hookNativeContextMenuInRenderer();
   startObserver();
 })();
