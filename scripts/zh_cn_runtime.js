@@ -5415,6 +5415,15 @@
     "No keyboard shortcuts found matching your filter.": "未找到匹配筛选条件的键盘快捷键。",
     "Browser Subagent": "浏览器子 Agent",
     "This Computer": "此电脑",
+    "Your This Computer setting": "您的“此电脑”设置",
+    "Your this computer setting": "您的“此电脑”设置",
+    "Your 此电脑 setting": "您的“此电脑”设置",
+    "Your Cloud setting": "您的云端设置",
+    "Your Global setting": "您的全局设置",
+    "Your Workspace setting": "您的工作区设置",
+    "Your Project setting": "您的项目设置",
+    "Your Default setting": "您的默认设置",
+    "Your default setting": "您的默认设置",
     "Pause (k)": "暂停 (k)",
     "Play (k)": "播放 (k)",
     "See plans": "查看订阅方案",
@@ -6267,6 +6276,13 @@
     [/^All changes since the branch point(\.?)$/i, (_m, dot) => `自分支起点以来的所有更改${dot ? '。' : ''}`],
     [/^All changes since\s+(.+?)(\.?)$/i, (_m, target, dot) => `自 ${target} 以来的所有更改${dot ? '。' : ''}`],
     [/^(?:Start|stop|end)\s+Voice\s+mode(\b.*)$/i, (m) => m.toLowerCase().startsWith('start') ? '开始语音模式' : '结束语音模式'],
+    [
+      /^Your\s+(.+?)\s+settings?(\.?)$/i,
+      (_m, target, dot) => {
+        const t = EXACT_MAP[target] || EXACT_MAP[target.toLowerCase()] || target;
+        return `您的${t}设置${dot ? '。' : ''}`;
+      }
+    ],
     [
       /^(.+?)\s*\((low|medium|high|extra|xhigh|max)(?:\s+thinking)?\)$/i,
       (_m, model, level) => {
