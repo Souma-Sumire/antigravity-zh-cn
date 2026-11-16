@@ -6462,6 +6462,92 @@
     }
   }
 
+  const PLUGIN_VERSION = '1.2.1';
+  const updateState = window.__AGY_UPDATE_STATE__ || {
+    status: 'idle',
+    currentVersion: PLUGIN_VERSION,
+    latestVersion: '',
+    error: '',
+    restartRequired: false,
+    requestId: '',
+    timerId: null
+  };
+  window.__AGY_UPDATE_STATE__ = updateState;
+
+  function clearUpdateTimer() {
+    if (updateState.timerId) {
+      clearTimeout(updateState.timerId);
+      updateState.timerId = null;
+    }
+  }
+
+  function refreshContextMenuIfOpen() {
+    if (contextMenuEl && document.body.contains(contextMenuEl)) {
+      showContextMenu();
+    }
+  }
+
+  function sendUpdateAction(action) {
+    if (updateState.status === 'checking' || updateState.status === 'updating') return;
+    clearUpdateTimer();
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    updateState.requestId = requestId;
+    updateState.error = '';
+    updateState.status = action === 'update' ? 'updating' : 'checking';
+    refreshContextMenuIfOpen();
+
+    const timeoutMs = action === 'update' ? 45000 : 15000;
+    updateState.timerId = setTimeout(() => {
+      if (updateState.requestId !== requestId) return;
+      if (updateState.status === 'checking' || updateState.status === 'updating') {
+        updateState.status = 'error';
+        updateState.error = '未收到主进程响应，请确认已安装启动 Hook 并重启应用';
+        refreshContextMenuIfOpen();
+      }
+    }, timeoutMs);
+
+    console.log('__AGY_UPDATE_ACTION__:' + JSON.stringify({ action, requestId }));
+  }
+
+  function handleUpdateEvent(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    if (payload.requestId && updateState.requestId && payload.requestId !== updateState.requestId) {
+      return;
+    }
+    clearUpdateTimer();
+
+    if (payload.type === 'check') {
+      if (payload.currentVersion) {
+        updateState.currentVersion = payload.currentVersion;
+      }
+      if (payload.ok) {
+        updateState.latestVersion = payload.latestVersion || '';
+        updateState.status = payload.hasUpdate ? 'available' : 'latest';
+        updateState.error = '';
+      } else {
+        updateState.status = 'error';
+        updateState.error = payload.error || '检查更新失败';
+      }
+      refreshContextMenuIfOpen();
+      return;
+    }
+
+    if (payload.type === 'updated') {
+      if (payload.ok) {
+        updateState.status = 'updated';
+        updateState.currentVersion = payload.version || updateState.latestVersion || PLUGIN_VERSION;
+        updateState.latestVersion = updateState.currentVersion;
+        updateState.restartRequired = Boolean(payload.restartRequired);
+        updateState.error = '';
+        showContextMenu();
+      } else {
+        updateState.status = 'error';
+        updateState.error = payload.error || '更新失败';
+        refreshContextMenuIfOpen();
+      }
+    }
+  }
+
   let contextMenuEl = null;
 
   function handleMenuKeydown(e) {
@@ -6542,6 +6628,89 @@
     label.appendChild(checkbox);
     label.appendChild(span);
     menu.appendChild(label);
+
+    const divider = document.createElement('div');
+    divider.style.cssText = 'height:1px;background:rgba(255,255,255,0.1);margin:6px 0;';
+    menu.appendChild(divider);
+
+    const updateRow = document.createElement('div');
+    updateRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:14px;padding:2px 0;';
+
+    const checkBtn = document.createElement('button');
+    checkBtn.type = 'button';
+    const isBusy = updateState.status === 'checking' || updateState.status === 'updating';
+    checkBtn.disabled = isBusy;
+    checkBtn.style.cssText = [
+      'background:none',
+      'border:none',
+      'padding:0',
+      'margin:0',
+      'font-family:inherit',
+      'font-size:11px',
+      'font-weight:500',
+      'text-align:left',
+      `color:${isBusy ? 'rgba(226,228,233,0.55)' : '#e2e4e9'}`,
+      `cursor:${isBusy ? 'default' : 'pointer'}`
+    ].join(';');
+
+    const statusTextMap = {
+      idle: '检查更新',
+      checking: '正在检查更新...',
+      latest: '已是最新版本',
+      available: `发现新版本 v${updateState.latestVersion}`,
+      updating: '正在更新...',
+      updated: `已更新至 v${updateState.currentVersion}`,
+      error: '检查失败，点击重试'
+    };
+    checkBtn.textContent = statusTextMap[updateState.status] || '检查更新';
+    checkBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sendUpdateAction('check');
+    });
+
+    const verLabel = document.createElement('span');
+    verLabel.textContent = `v${updateState.currentVersion || PLUGIN_VERSION}`;
+    verLabel.style.cssText = 'font-size:10px;color:rgba(226,228,233,0.5);';
+
+    updateRow.appendChild(checkBtn);
+    updateRow.appendChild(verLabel);
+    menu.appendChild(updateRow);
+
+    if (updateState.status === 'available') {
+      const actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.textContent = '立即更新';
+      actionBtn.style.cssText = [
+        'margin-top:6px',
+        'width:100%',
+        'padding:4px 8px',
+        'border-radius:4px',
+        'border:none',
+        'background:#2563eb',
+        'color:#ffffff',
+        'font-family:inherit',
+        'font-size:11px',
+        'font-weight:500',
+        'cursor:pointer'
+      ].join(';');
+      actionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sendUpdateAction('update');
+      });
+      menu.appendChild(actionBtn);
+    } else if (updateState.status === 'updated') {
+      const tip = document.createElement('div');
+      tip.textContent = updateState.restartRequired
+        ? '请重启 Antigravity 以应用全部更新'
+        : '界面翻译已热更新生效';
+      tip.style.cssText = 'margin-top:5px;font-size:10px;color:#4ade80;line-height:1.35;';
+      menu.appendChild(tip);
+    } else if (updateState.status === 'error' && updateState.error) {
+      const errTip = document.createElement('div');
+      errTip.textContent = updateState.error;
+      errTip.style.cssText = 'margin-top:5px;font-size:10px;color:#f87171;max-width:220px;white-space:normal;line-height:1.35;';
+      menu.appendChild(errTip);
+    }
 
     menu.addEventListener('pointerdown', (e) => e.stopPropagation());
     menu.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -6681,7 +6850,9 @@
   }
 
   window.__AGY_I18N__ = {
-    version: '1.2.1',
+    version: PLUGIN_VERSION,
+    handleUpdateEvent,
+    checkForUpdates: () => sendUpdateAction('check'),
     isTitleTranslationEnabled,
     showContextMenu,
     hideContextMenu,

@@ -589,6 +589,31 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
 
   let cachedScript = '';
   let lastMtime = 0;
+  let updateActionInFlight = false;
+
+  function loadPluginUpdater() {
+    const candidates = [
+      path.join(pluginScriptsDir, 'plugin_updater.js'),
+      path.join(__dirname, 'plugin_updater.js')
+    ];
+    for (const p of candidates) {
+      try {
+        if (fs.existsSync(p)) {
+          delete require.cache[require.resolve(p)];
+          return require(p);
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  function sendUpdateEventToWebContents(wc, payload) {
+    if (!wc || wc.isDestroyed()) return;
+    wc.executeJavaScript(
+      `try{window.__AGY_I18N__&&window.__AGY_I18N__.handleUpdateEvent&&window.__AGY_I18N__.handleUpdateEvent(${JSON.stringify(payload)});}catch(_){}`,
+      true
+    ).catch(() => {});
+  }
 
   function getRuntimeScript() {
     const candidates = [
@@ -704,6 +729,71 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
             saveTitleTranslateConfig(data.enableRemoteTitleTranslation);
           }
         } catch (_) {}
+      }
+      if (typeof message === 'string' && message.startsWith('__AGY_UPDATE_ACTION__:')) {
+        (async () => {
+          let reqData = {};
+          try {
+            reqData = JSON.parse(message.slice('__AGY_UPDATE_ACTION__:'.length)) || {};
+          } catch (_) {
+            return;
+          }
+          const action = reqData.action;
+          const requestId = reqData.requestId || '';
+          if (updateActionInFlight) {
+            sendUpdateEventToWebContents(wc, {
+              type: action === 'update' ? 'updated' : 'check',
+              requestId,
+              ok: false,
+              error: '已有更新任务正在进行中'
+            });
+            return;
+          }
+          const updater = loadPluginUpdater();
+          if (!updater) {
+            sendUpdateEventToWebContents(wc, {
+              type: action === 'update' ? 'updated' : 'check',
+              requestId,
+              ok: false,
+              error: '未找到更新模块 plugin_updater.js'
+            });
+            return;
+          }
+          updateActionInFlight = true;
+          try {
+            if (action === 'check') {
+              const res = await updater.checkForUpdates();
+              sendUpdateEventToWebContents(wc, Object.assign({ type: 'check', requestId }, res));
+            } else if (action === 'update') {
+              const res = await updater.performUpdate();
+              if (res && res.ok) {
+                cachedScript = '';
+                lastMtime = 0;
+                const newCode = getRuntimeScript();
+                const allWindows = electron.BrowserWindow ? electron.BrowserWindow.getAllWindows() : [];
+                for (const win of allWindows) {
+                  if (win && win.webContents && !win.webContents.isDestroyed()) {
+                    const targetWc = win.webContents;
+                    const targetUrl = targetWc.getURL ? targetWc.getURL() : '';
+                    if (isAllowedPageUrl(targetUrl) && newCode) {
+                      await targetWc.executeJavaScript(getTitleCacheInjection() + newCode, true).catch(() => {});
+                    }
+                  }
+                }
+              }
+              sendUpdateEventToWebContents(wc, Object.assign({ type: 'updated', requestId }, res));
+            }
+          } catch (err) {
+            sendUpdateEventToWebContents(wc, {
+              type: action === 'update' ? 'updated' : 'check',
+              requestId,
+              ok: false,
+              error: err && err.message ? err.message : '操作失败'
+            });
+          } finally {
+            updateActionInFlight = false;
+          }
+        })();
       }
     });
 
