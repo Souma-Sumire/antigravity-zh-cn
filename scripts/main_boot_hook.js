@@ -143,7 +143,21 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     'Add to Chat': '添加到对话',
     'Quote Selection': '引用选中内容',
     'Open in Code Search': '在代码搜索中打开',
-    'Comment on Selection': '评论选中内容'
+    'Comment on Selection': '评论选中内容',
+    'Connect to WSL': '连接到 WSL',
+    'Reopen Locally': '在本地重新打开',
+    'Connect to SSH Host': '连接到 SSH 主机',
+    'Connect to SSH Host…': '连接到 SSH 主机…',
+    'Stop SSH Server…': '停止 SSH 服务…',
+    'Stop SSH server': '停止 SSH 服务',
+    'Switch to This Computer': '切换到此电脑',
+    'Connection info…': '连接信息…',
+    'Connection info': '连接信息',
+    'Select Download Folder': '选择下载文件夹',
+    'Choose an SSH config file': '选择 SSH 配置文件',
+    'Choose a Passkey': '选择通行密钥 (Passkey)',
+    'Passkeys': '通行密钥 (Passkey)',
+    'Connect a device': '连接设备'
   };
 
   const ROLE_MAP = {
@@ -382,7 +396,22 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     'Delete conversation permanently?': '永久删除对话？',
     'Are you sure you want to permanently delete this conversation?': '确定要永久删除此对话吗？',
     'Are you sure you want to permanently delete this conversation? This action cannot be undone.': '确定要永久删除此对话吗？此操作无法撤销。',
-    'Are you sure you want to delete this conversation permanently? This action cannot be undone.': '确定要永久删除此对话吗？此操作无法撤销。'
+    'Are you sure you want to delete this conversation permanently? This action cannot be undone.': '确定要永久删除此对话吗？此操作无法撤销。',
+    'Select Download Folder': '选择下载文件夹',
+    'Choose an SSH config file': '选择 SSH 配置文件',
+    'SSH connection failed': 'SSH 连接失败',
+    'Stop SSH server': '停止 SSH 服务',
+    'Stop Server': '停止服务',
+    'Agents running on this host will stop and its window will close.': '在此主机上运行的 Agent 将停止，且其窗口将关闭。',
+    'Reconnect first, then stop its server.': '请先重新连接，然后再停止其服务。',
+    'Sign in': '登录',
+    'Sign In': '登录',
+    'Continue only if you just chose to sign in with your organization': '仅当您刚刚选择使用组织账号登录时才继续操作',
+    'The connection was closed before it finished.': '连接在完成前已关闭。',
+    'Choose a Passkey': '选择通行密钥 (Passkey)',
+    'Select a passkey account to continue:': '选择一个通行密钥账号以继续：',
+    'Reconnect failed': '重新连接失败',
+    'Could not stop the SSH server': '无法停止 SSH 服务'
   };
 
   function translateDialogOptions(opts) {
