@@ -21,7 +21,203 @@ function getSqliteModule() {
   }
 }
 
+function isCorruptedText(s) {
+  if (!s || typeof s !== 'string') return false;
+  return s.includes('\uFFFD') || /MYMEMORY|USAGELIMITS|FREE TRANSLATIONS|我的记忆警告|记忆警告/i.test(s);
+}
+
+function repairCorruptedTitles(root, sqlite) {
+  const manifestPath = path.join(root, 'historical_titles_backup.json');
+  const cachePath = path.join(root, 'title_api_cache.json');
+  const dbPath = path.join(root, 'conversation_summaries.db');
+  const annotationsDir = path.join(root, 'annotations');
+
+  const recoveryById = new Map();
+  const corruptedToClean = new Map();
+  let manifest = [];
+
+  if (fs.existsSync(manifestPath)) {
+    try {
+      manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (!Array.isArray(manifest)) manifest = [];
+    } catch (_) {
+      manifest = [];
+    }
+  }
+
+  for (const item of manifest) {
+    if (!item || typeof item !== 'object') continue;
+    const id = item.id || (item.file ? item.file.replace(/\.pbtxt$/, '') : null);
+    if (!id) continue;
+
+    if (!recoveryById.has(id)) {
+      recoveryById.set(id, { original: null, translated: null });
+    }
+    const rec = recoveryById.get(id);
+    if (item.original && !isCorruptedText(item.original)) {
+      if (!rec.original || (/[\u4e00-\u9fa5]/.test(rec.original) && !/[\u4e00-\u9fa5]/.test(item.original))) {
+        rec.original = item.original;
+      }
+    }
+    if (item.translated && !isCorruptedText(item.translated) && /[\u4e00-\u9fa5]/.test(item.translated)) {
+      if (!rec.translated) {
+        rec.translated = item.translated;
+      }
+    }
+  }
+
+  for (const item of manifest) {
+    if (!item || typeof item !== 'object') continue;
+    const id = item.id || (item.file ? item.file.replace(/\.pbtxt$/, '') : null);
+    const rec = id ? recoveryById.get(id) : null;
+    const cleanTarget = rec ? (rec.translated || rec.original) : null;
+    if (!cleanTarget) continue;
+    if (item.original && isCorruptedText(item.original)) {
+      corruptedToClean.set(item.original.trim(), cleanTarget);
+    }
+    if (item.translated && isCorruptedText(item.translated)) {
+      corruptedToClean.set(item.translated.trim(), cleanTarget);
+    }
+  }
+
+  let repairedCount = 0;
+
+  if (sqlite && fs.existsSync(dbPath)) {
+    let db = null;
+    let inTx = false;
+    try {
+      db = new sqlite.DatabaseSync(dbPath);
+      const rows = db.prepare('SELECT conversation_id, title FROM conversation_summaries').all();
+      const updateSum = db.prepare('UPDATE conversation_summaries SET title = ? WHERE conversation_id = ?');
+      let ftsRows = [];
+      let updateFts = null;
+      try {
+        ftsRows = db.prepare("SELECT conversation_id, title FROM conversations_fts WHERE title != ''").all();
+        updateFts = db.prepare('UPDATE conversations_fts SET title = ? WHERE conversation_id = ?');
+      } catch (_) {}
+
+      db.exec('BEGIN TRANSACTION');
+      inTx = true;
+
+      for (const r of rows) {
+        const cur = (r.title || '').trim();
+        if (!isCorruptedText(cur)) continue;
+        const rec = recoveryById.get(r.conversation_id);
+        const cleanTitle = (rec && (rec.translated || rec.original)) || corruptedToClean.get(cur);
+        if (cleanTitle && !isCorruptedText(cleanTitle) && cleanTitle !== cur) {
+          updateSum.run(cleanTitle, r.conversation_id);
+          repairedCount++;
+        }
+      }
+
+      if (updateFts) {
+        for (const r of ftsRows) {
+          const cur = (r.title || '').trim();
+          if (!isCorruptedText(cur)) continue;
+          const rec = recoveryById.get(r.conversation_id);
+          const cleanTitle = (rec && (rec.translated || rec.original)) || corruptedToClean.get(cur);
+          if (cleanTitle && !isCorruptedText(cleanTitle) && cleanTitle !== cur) {
+            try {
+              updateFts.run(cleanTitle, r.conversation_id);
+              repairedCount++;
+            } catch (_) {}
+          }
+        }
+      }
+
+      db.exec('COMMIT');
+      inTx = false;
+    } catch (_) {
+      if (db && inTx) {
+        try { db.exec('ROLLBACK'); } catch (_) {}
+      }
+    } finally {
+      if (db) {
+        try { db.close(); } catch (_) {}
+      }
+    }
+  }
+
+  if (fs.existsSync(annotationsDir)) {
+    try {
+      const files = fs.readdirSync(annotationsDir).filter((f) => f.endsWith('.pbtxt'));
+      for (const file of files) {
+        const fullPath = path.join(annotationsDir, file);
+        try {
+          const content = fs.readFileSync(fullPath, 'utf8');
+          const match = content.match(/title:\s*"([^"]+)"/);
+          if (!match) continue;
+          const cur = match[1].trim();
+          if (!isCorruptedText(cur)) continue;
+          const id = file.replace(/\.pbtxt$/, '');
+          const rec = recoveryById.get(id);
+          const cleanTitle = (rec && (rec.translated || rec.original)) || corruptedToClean.get(cur);
+          if (cleanTitle && !isCorruptedText(cleanTitle) && cleanTitle !== cur) {
+            const titleRegex = new RegExp(`title:\\s*"${escapeRegExp(match[1])}"`);
+            const escaped = escapePbtxtString(cleanTitle);
+            const newContent = content.replace(titleRegex, () => `title: "${escaped}"`);
+            if (newContent !== content) {
+              fs.writeFileSync(fullPath, newContent, 'utf8');
+              repairedCount++;
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  if (manifest.length > 0) {
+    try {
+      const cleanedManifest = [];
+      const seenKeys = new Set();
+      for (const item of manifest) {
+        if (!item || typeof item !== 'object') continue;
+        if (isCorruptedText(item.original) || isCorruptedText(item.translated)) continue;
+        if (/[\u4e00-\u9fa5]/.test(item.original)) continue;
+        const key = `${item.type}:${item.id || item.file}:${item.original}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        cleanedManifest.push(item);
+      }
+      if (cleanedManifest.length !== manifest.length) {
+        fs.writeFileSync(manifestPath, JSON.stringify(cleanedManifest, null, 2), 'utf8');
+      }
+    } catch (_) {}
+  }
+
+  try {
+    let cache = {};
+    if (fs.existsSync(cachePath)) {
+      cache = JSON.parse(fs.readFileSync(cachePath, 'utf8')) || {};
+    }
+    let cacheChanged = false;
+    for (const [k, v] of Object.entries(cache)) {
+      if (isCorruptedText(k) || isCorruptedText(v) || /[\u4e00-\u9fa5]/.test(k)) {
+        delete cache[k];
+        cacheChanged = true;
+      }
+    }
+    for (const [, rec] of recoveryById.entries()) {
+      if (rec.original && rec.translated && !/[\u4e00-\u9fa5]/.test(rec.original) && cache[rec.original] !== rec.translated) {
+        cache[rec.original] = rec.translated;
+        cacheChanged = true;
+      }
+    }
+    if (cacheChanged) {
+      fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf8');
+    }
+  } catch (_) {}
+
+  return repairedCount;
+}
+
 async function syncHistoricalTitles() {
+  const root = path.join(os.homedir(), '.gemini', 'antigravity');
+  const sqlite = getSqliteModule();
+  try {
+    repairCorruptedTitles(root, sqlite);
+  } catch (_) {}
+
   if (!isRemoteTranslateEnabled()) {
     return {
       success: true,
@@ -32,7 +228,6 @@ async function syncHistoricalTitles() {
     };
   }
 
-  const root = path.join(os.homedir(), '.gemini', 'antigravity');
   const annotationsDir = path.join(root, 'annotations');
   const dbPath = path.join(root, 'conversation_summaries.db');
 
@@ -45,11 +240,11 @@ async function syncHistoricalTitles() {
     if (!title || typeof title !== 'string') return false;
     const s = title.trim();
     if (!s || s.length < 3) return false;
+    if (isCorruptedText(s) || /[\u4e00-\u9fa5]/.test(s)) return false;
     return /[a-zA-Z]{3,}/.test(s) && !/^(?:UI|UX|FFXIV|Git|PR)$/.test(s);
   }
 
   // 1. 扫描 SQLite 本地会话摘要数据库（包含主表与全文检索表）
-  const sqlite = getSqliteModule();
   if (sqlite && fs.existsSync(dbPath)) {
     try {
       const db = new sqlite.DatabaseSync(dbPath);

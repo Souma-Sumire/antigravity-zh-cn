@@ -6396,6 +6396,17 @@
       if (titleCache[normalizedKey]) {
         return str.replace(trimmed, () => titleCache[normalizedKey]);
       }
+      if (trimmed.includes('\uFFFD')) {
+        try {
+          const pattern = '^' + trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\uFFFD+/g, '.+') + '$';
+          const healRe = new RegExp(pattern);
+          for (const val of Object.values(titleCache)) {
+            if (typeof val === 'string' && !val.includes('\uFFFD') && healRe.test(val)) {
+              return str.replace(trimmed, () => val);
+            }
+          }
+        } catch (_) {}
+      }
     }
 
     const notApplyMatch = normalizedKey.match(
@@ -7157,7 +7168,8 @@
     }
     if (window.__AGY_TITLE_CACHE__) {
       for (const k of Object.keys(window.__AGY_TITLE_CACHE__)) {
-        if (window.__AGY_TITLE_CACHE__[k] === '反重力' || window.__AGY_TITLE_CACHE__[k] === '反重力-Zh-CN') {
+        const v = window.__AGY_TITLE_CACHE__[k];
+        if (v === '反重力' || v === '反重力-Zh-CN' || !v || typeof v !== 'string' || k.includes('\uFFFD') || v.includes('\uFFFD') || /[\u4e00-\u9fa5]/.test(k) || /MYMEMORY|USAGELIMITS|FREE TRANSLATIONS|我的记忆警告|记忆警告/i.test(v)) {
           delete window.__AGY_TITLE_CACHE__[k];
         }
       }
@@ -7228,7 +7240,7 @@
       if (res.ok) {
         const json = await res.json();
         const trans = json?.[0]?.translations?.[0]?.text?.trim();
-        if (trans && trans !== s) {
+        if (trans && trans !== s && !trans.includes('\uFFFD') && !/MYMEMORY|USAGELIMITS|FREE TRANSLATIONS|我的记忆警告|记忆警告/i.test(trans)) {
           window.__AGY_TITLE_CACHE__ = window.__AGY_TITLE_CACHE__ || {};
           window.__AGY_TITLE_CACHE__[s] = trans;
           try {

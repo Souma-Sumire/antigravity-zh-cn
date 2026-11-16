@@ -10,10 +10,32 @@ const { URL } = require('url');
 
 const CACHE_FILE = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
 
+function isValidTranslationText(s) {
+  if (!s || typeof s !== 'string') return false;
+  if (s.includes('\uFFFD')) return false;
+  if (/MYMEMORY|USAGELIMITS|FREE TRANSLATIONS|我的记忆警告|记忆警告/i.test(s)) return false;
+  return true;
+}
+
 let memoryCache = {};
 try {
   if (fs.existsSync(CACHE_FILE)) {
-    memoryCache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+    const rawCache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+    let dirty = false;
+    if (rawCache && typeof rawCache === 'object') {
+      for (const [k, v] of Object.entries(rawCache)) {
+        if (isValidTranslationText(k) && isValidTranslationText(v) && !/[\u4e00-\u9fa5]/.test(k)) {
+          memoryCache[k] = v;
+        } else {
+          dirty = true;
+        }
+      }
+    }
+    if (dirty) {
+      try {
+        fs.writeFileSync(CACHE_FILE, JSON.stringify(memoryCache, null, 2), 'utf8');
+      } catch (_) {}
+    }
   }
 } catch (_) {
   memoryCache = {};
@@ -91,9 +113,10 @@ function requestMicrosoftTranslate(texts, proxyConfig) {
     const apiPath = '/translate/translatetext?to=zh-Hans';
 
     const handleResponse = (res) => {
-      let body = '';
-      res.on('data', (chunk) => (body += chunk));
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
       res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
         try {
           const json = JSON.parse(body);
           if (Array.isArray(json)) {
@@ -203,9 +226,10 @@ function requestGoogleTranslate(text, proxyConfig) {
     const apiPath = `/translate_a/t?client=dict-chrome-ex&sl=auto&tl=zh-CN&q=${q}`;
 
     const handleResponse = (res) => {
-      let body = '';
-      res.on('data', (chunk) => (body += chunk));
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
       res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
         try {
           const json = JSON.parse(body);
           if (Array.isArray(json) && json[0] && typeof json[0][0] === 'string') {
@@ -302,12 +326,19 @@ function requestMyMemory(text, proxyConfig) {
     const apiPath = `/get?q=${q}&langpair=en|zh-CN`;
 
     const handleResponse = (res) => {
-      let body = '';
-      res.on('data', (chunk) => (body += chunk));
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
       res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
         try {
           const json = JSON.parse(body);
-          if (json && json.responseData && json.responseData.translatedText) {
+          if (
+            json &&
+            json.responseStatus === 200 &&
+            json.responseData &&
+            json.responseData.translatedText &&
+            isValidTranslationText(json.responseData.translatedText)
+          ) {
             resolve(json.responseData.translatedText);
           } else {
             reject(new Error(`MyMemory API error: ${body.slice(0, 100)}`));
@@ -415,7 +446,7 @@ const inFlight = new Map();
 async function translateWithApi(text) {
   if (!text || typeof text !== 'string') return text;
   const raw = text.trim();
-  if (!raw) return raw;
+  if (!raw || /[\u4e00-\u9fa5\uFFFD]/.test(raw) || !isValidTranslationText(raw)) return raw;
   if (!isRemoteTranslateEnabled()) {
     return raw;
   }
@@ -470,7 +501,7 @@ async function translateWithApi(text) {
         }
       }
 
-      if (trans && trans !== raw) {
+      if (trans && trans !== raw && isValidTranslationText(trans)) {
         trans = trans.replace(/[。，.]$/, '').trim();
         trans = applyTermProtection(trans);
         trans = formatPangu(trans);
@@ -510,7 +541,7 @@ async function translateBatchWithApi(texts) {
   for (const raw of texts) {
     if (!raw || typeof raw !== 'string') continue;
     const trimmed = raw.trim();
-    if (!trimmed) continue;
+    if (!trimmed || /[\u4e00-\u9fa5\uFFFD]/.test(trimmed) || !isValidTranslationText(trimmed)) continue;
     if (memoryCache[trimmed]) {
       resultMap[trimmed] = memoryCache[trimmed];
     } else if (!toFetch.includes(trimmed)) {
@@ -530,7 +561,7 @@ async function translateBatchWithApi(texts) {
       if (Array.isArray(msResults) && msResults.length === chunk.length) {
         chunk.forEach((orig, idx) => {
           let line = (msResults[idx] || '').replace(/[。，.]$/, '').trim();
-          if (line && line !== orig) {
+          if (line && line !== orig && isValidTranslationText(line)) {
             line = applyTermProtection(line);
             line = formatPangu(line);
             memoryCache[orig] = line;
