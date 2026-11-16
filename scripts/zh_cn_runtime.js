@@ -2516,6 +2516,8 @@
     "Failed to execute": "执行失败",
     "Running command": "正在执行命令",
     "Ran command": "已执行命令",
+    "Ran": "已执行",
+    "ran": "已执行",
     "Used MCP tool": "已使用 MCP 工具",
     "Used tool": "已使用工具",
     "Generated image": "已生成图像",
