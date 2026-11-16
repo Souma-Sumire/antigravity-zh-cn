@@ -5851,7 +5851,7 @@
     '[data-file-uri]',
     '[data-uri]',
     '[data-quotable-inline="true"]',
-    '[data-quotable="true"]',
+
     '[class*="diffEditor"]',
     '[aria-label="File Viewer"]',
     '[aria-label="文件查看器"]',
