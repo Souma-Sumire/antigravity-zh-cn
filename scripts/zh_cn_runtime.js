@@ -858,6 +858,10 @@
 
     "What can we get done today?": "今天我们要做些什么？",
     "What can we get done today": "今天我们要做些什么",
+    "Hey there, what should we build today?": "嗨，今天我们要构建什么？",
+    "Welcome back. Where should we pick up?": "欢迎回来。我们从哪里继续？",
+    "Good to see you. What's next?": "很高兴见到你。接下来做什么？",
+    "Good to see you. What’s next?": "很高兴见到你。接下来做什么？",
     "Next card": "下一张卡片",
     "Previous card": "上一张卡片",
 
@@ -6282,6 +6286,18 @@
         const t = EXACT_MAP[target] || EXACT_MAP[target.toLowerCase()] || target;
         return `您的${t}设置${dot ? '。' : ''}`;
       }
+    ],
+    [
+      /^Hey\s+(.+?),\s*what should we build today\??$/i,
+      (_m, name) => `嗨，${name.trim()}，今天我们要构建什么？`
+    ],
+    [
+      /^Welcome back,\s*(.+?)\.\s*Where should we pick up\??$/i,
+      (_m, name) => `欢迎回来，${name.trim()}。我们从哪里继续？`
+    ],
+    [
+      /^Good to see you,\s*(.+?)\.\s*What['’]s next\??$/i,
+      (_m, name) => `很高兴见到你，${name.trim()}。接下来做什么？`
     ],
     [
       /^(.+?)\s*\((low|medium|high|extra|xhigh|max)(?:\s+thinking)?\)$/i,
