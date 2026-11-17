@@ -2730,6 +2730,8 @@
     "Filter": "筛选",
     "Scheduled": "已计划",
     "Environment": "环境",
+    "Repo": "代码仓库",
+    "Repos": "代码仓库",
     "None": "无",
     "Fast": "快速",
     "Sort Conversations": "对话排序",
