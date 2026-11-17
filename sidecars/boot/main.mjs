@@ -243,6 +243,15 @@ class ZhCnSidecarBridge {
     if (text.startsWith('__AGY_CONFIG_SYNC__:')) {
       try {
         const data = JSON.parse(text.slice('__AGY_CONFIG_SYNC__:'.length));
+        if (typeof data.language === 'string') {
+          try {
+            const dir = path.dirname(configPath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const cur = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
+            cur.language = data.language === 'en-US' ? 'en-US' : 'zh-CN';
+            fs.writeFileSync(configPath, JSON.stringify(cur, null, 2), 'utf8');
+          } catch (_) {}
+        }
         if (typeof data.enableRemoteTitleTranslation !== 'undefined') {
           const nextEnabled = Boolean(data.enableRemoteTitleTranslation);
           saveTitleTranslateConfig(nextEnabled);

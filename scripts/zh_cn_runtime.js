@@ -7636,6 +7636,9 @@
     try {
       window.localStorage.setItem(STORAGE_KEY, currentLang);
     } catch (_) {}
+    try {
+      console.log('__AGY_CONFIG_SYNC__:' + JSON.stringify({ language: currentLang }));
+    } catch (_) {}
     document.documentElement.lang = currentLang;
     if (currentLang === 'zh-CN') {
       customDict = getCustomDict();
@@ -7797,6 +7800,7 @@
   };
 
   function translateNotificationText(text) {
+    if (currentLang !== 'zh-CN') return text;
     if (!text || typeof text !== "string") return text;
     const s = text.trim();
     if (!s) return text;

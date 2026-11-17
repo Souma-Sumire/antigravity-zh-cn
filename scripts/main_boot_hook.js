@@ -475,6 +475,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   } catch (_) {}
 
   function translateNotificationTextInMain(text) {
+    if (getLanguageConfig() !== 'zh-CN') return text;
     if (!text || typeof text !== 'string') return text;
     const s = text.trim();
     if (!s) return text;
@@ -606,6 +607,29 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       current.enableRemoteTitleTranslation = Boolean(enabled);
       fs.writeFileSync(configPath, JSON.stringify(current, null, 2), 'utf8');
       process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION = enabled ? '1' : '0';
+    } catch (_) {}
+  }
+
+  function getLanguageConfig() {
+    try {
+      if (fs.existsSync(configPath)) {
+        const json = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (json.language === 'en-US') return 'en-US';
+      }
+    } catch (_) {}
+    return 'zh-CN';
+  }
+
+  function saveLanguageConfig(lang) {
+    try {
+      const dir = path.dirname(configPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      let current = {};
+      if (fs.existsSync(configPath)) {
+        current = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      }
+      current.language = lang === 'en-US' ? 'en-US' : 'zh-CN';
+      fs.writeFileSync(configPath, JSON.stringify(current, null, 2), 'utf8');
     } catch (_) {}
   }
 
@@ -854,6 +878,9 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       if (typeof message === 'string' && message.startsWith('__AGY_CONFIG_SYNC__:')) {
         try {
           const data = JSON.parse(message.slice('__AGY_CONFIG_SYNC__:'.length));
+          if (typeof data.language === 'string') {
+            saveLanguageConfig(data.language);
+          }
           if (typeof data.enableRemoteTitleTranslation !== 'undefined') {
             const nextEnabled = Boolean(data.enableRemoteTitleTranslation);
             saveTitleTranslateConfig(nextEnabled);
