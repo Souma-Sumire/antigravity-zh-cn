@@ -4911,6 +4911,9 @@
     "Pause": "暂停",
     "Resume": "继续",
     "Send Message": "发送消息",
+    "Send Message Enter": "发送消息 Enter",
+    "Send Message Ctrl+Enter": "发送消息 Ctrl+Enter",
+    "Send Message Cmd+Enter": "发送消息 Cmd+Enter",
     "Queue Message": "排队发送消息",
     "Sent!": "已发送！",
     "Reconnect": "重新连接",
@@ -6506,6 +6509,14 @@
     }
 
     const errorIdMatch = normalizedKey.match(/^Error ID:\s*([a-zA-Z0-9-]+)$/i);
+
+    const sendWithKeyMatch = normalizedKey.match(
+      /^(Send Message|Queue Message)\s+(Enter|Return|Ctrl\+Enter|Cmd\+Enter|⌘Enter|⇧Enter|Shift\+Enter|Alt\+Enter|↵)$/i
+    );
+    if (sendWithKeyMatch) {
+      const actionText = sendWithKeyMatch[1].toLowerCase() === 'queue message' ? '排队发送消息' : '发送消息';
+      return str.replace(trimmed, `${actionText} ${sendWithKeyMatch[2]}`);
+    }
     if (errorIdMatch) {
       return str.replace(trimmed, `错误 ID: ${errorIdMatch[1]}`);
     }
