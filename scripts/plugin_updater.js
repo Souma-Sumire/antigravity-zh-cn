@@ -15,40 +15,35 @@ const DEFAULT_REPO_NAME = 'antigravity-zh-cn';
 const DEFAULT_BRANCH = 'main';
 const DEFAULT_PLUGIN_DIR = path.join(os.homedir(), '.gemini', 'config', 'plugins', 'zh-cn-ui');
 const IGNORE_NAMES = new Set(['.git', 'node_modules', '.workbuddy', '.vscode', '.idea', 'scratch']);
+const TRACKED_FILES = [
+  'scripts/zh_cn_runtime.js',
+  'scripts/main_boot_hook.js',
+  'scripts/plugin_updater.js',
+  'scripts/inject_live.js',
+  'sidecars/boot/main.mjs'
+];
 
-function normalizeVersion(ver) {
-  return String(ver || '').trim().replace(/^v/i, '');
+function hashNormalizedBuffer(buf) {
+  // 统一将 CRLF 转为 LF，避免 Windows 本地检出换行符差异导致哈希误判
+  const normalized = Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
+  return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
-function compareVersions(a, b) {
-  const pa = normalizeVersion(a).split('.').map((n) => parseInt(n, 10) || 0);
-  const pb = normalizeVersion(b).split('.').map((n) => parseInt(n, 10) || 0);
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i++) {
-    const va = pa[i] || 0;
-    const vb = pb[i] || 0;
-    if (va > vb) return 1;
-    if (va < vb) return -1;
-  }
-  return 0;
+function combineShortHash(hashes) {
+  return crypto.createHash('sha256').update(hashes.join('|')).digest('hex').slice(0, 7);
 }
 
-function getLocalVersion(pluginDir = DEFAULT_PLUGIN_DIR) {
-  const candidates = [
-    path.join(pluginDir, 'plugin.json'),
-    path.join(pluginDir, 'package.json')
-  ];
-  for (const filePath of candidates) {
+function getLocalHash(pluginDir = DEFAULT_PLUGIN_DIR) {
+  const fileHashes = TRACKED_FILES.map((relPath) => {
+    const fullPath = path.join(pluginDir, relPath);
     try {
-      if (fs.existsSync(filePath)) {
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        if (data && typeof data.version === 'string' && data.version.trim()) {
-          return normalizeVersion(data.version);
-        }
-      }
-    } catch (_) {}
-  }
-  return '0.0.0';
+      if (!fs.existsSync(fullPath)) return 'missing';
+      return hashNormalizedBuffer(fs.readFileSync(fullPath));
+    } catch (_) {
+      return 'error';
+    }
+  });
+  return combineShortHash(fileHashes);
 }
 
 function getProxyConfig() {
@@ -307,30 +302,29 @@ async function checkForUpdates(options = {}) {
   const owner = options.owner || DEFAULT_REPO_OWNER;
   const repo = options.repo || DEFAULT_REPO_NAME;
   const branch = options.branch || DEFAULT_BRANCH;
-  const currentVersion = getLocalVersion(pluginDir);
+  const timeoutMs = options.timeoutMs || 10000;
+  const currentHash = getLocalHash(pluginDir);
 
-  const manifestUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/plugin.json?t=${Date.now()}`;
   try {
-    const buf = await fetchBuffer(manifestUrl, options.timeoutMs || 10000);
-    const remoteManifest = JSON.parse(buf.toString('utf8'));
-    const latestVersion = normalizeVersion(remoteManifest && remoteManifest.version);
-    if (!latestVersion) {
-      return {
-        ok: false,
-        currentVersion,
-        error: '远端版本信息无效'
-      };
-    }
+    const stamp = Date.now();
+    const remoteHashes = await Promise.all(
+      TRACKED_FILES.map(async (relPath) => {
+        const fileUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${relPath}?t=${stamp}`;
+        const buf = await fetchBuffer(fileUrl, timeoutMs);
+        return hashNormalizedBuffer(buf);
+      })
+    );
+    const latestHash = combineShortHash(remoteHashes);
     return {
       ok: true,
-      currentVersion,
-      latestVersion,
-      hasUpdate: compareVersions(latestVersion, currentVersion) > 0
+      currentHash,
+      latestHash,
+      hasUpdate: currentHash !== latestHash
     };
   } catch (err) {
     return {
       ok: false,
-      currentVersion,
+      currentHash,
       error: err && err.message ? err.message : '网络请求失败'
     };
   }
@@ -386,19 +380,19 @@ async function performUpdate(options = {}) {
       }
     }
 
-    const updatedVersion = getLocalVersion(pluginDir);
+    const updatedHash = getLocalHash(pluginDir);
     const nextBootHookHash = getFileHash(bootHookPath);
     const restartRequired = Boolean(prevBootHookHash && nextBootHookHash && prevBootHookHash !== nextBootHookHash);
 
     return {
       ok: true,
-      version: updatedVersion,
+      hash: updatedHash,
       restartRequired
     };
   } catch (err) {
     return {
       ok: false,
-      version: getLocalVersion(pluginDir),
+      hash: getLocalHash(pluginDir),
       error: err && err.message ? err.message : '更新失败'
     };
   }
@@ -406,8 +400,7 @@ async function performUpdate(options = {}) {
 
 module.exports = {
   DEFAULT_PLUGIN_DIR,
-  compareVersions,
-  getLocalVersion,
+  getLocalHash,
   checkForUpdates,
   performUpdate
 };

@@ -7240,11 +7240,11 @@
     }
   }
 
-  const PLUGIN_VERSION = '1.2.1';
+
   const updateState = window.__AGY_UPDATE_STATE__ || {
     status: 'idle',
-    currentVersion: PLUGIN_VERSION,
-    latestVersion: '',
+    currentHash: '',
+    latestHash: '',
     error: '',
     restartRequired: false,
     requestId: '',
@@ -7295,11 +7295,11 @@
     clearUpdateTimer();
 
     if (payload.type === 'check') {
-      if (payload.currentVersion) {
-        updateState.currentVersion = payload.currentVersion;
+      if (payload.currentHash) {
+        updateState.currentHash = payload.currentHash;
       }
       if (payload.ok) {
-        updateState.latestVersion = payload.latestVersion || '';
+        updateState.latestHash = payload.latestHash || '';
         updateState.status = payload.hasUpdate ? 'available' : 'latest';
         updateState.error = '';
       } else {
@@ -7313,8 +7313,8 @@
     if (payload.type === 'updated') {
       if (payload.ok) {
         updateState.status = 'updated';
-        updateState.currentVersion = payload.version || updateState.latestVersion || PLUGIN_VERSION;
-        updateState.latestVersion = updateState.currentVersion;
+        updateState.currentHash = payload.hash || updateState.latestHash || updateState.currentHash;
+        updateState.latestHash = updateState.currentHash;
         updateState.restartRequired = Boolean(payload.restartRequired);
         updateState.error = '';
         showContextMenu();
@@ -7435,9 +7435,9 @@
       idle: '检查更新',
       checking: '正在检查更新...',
       latest: '已是最新版本',
-      available: `发现新版本 v${updateState.latestVersion}`,
+      available: updateState.latestHash ? `发现更新 (${updateState.latestHash})` : '发现可用更新',
       updating: '正在更新...',
-      updated: `已更新至 v${updateState.currentVersion}`,
+      updated: updateState.currentHash ? `已更新 (${updateState.currentHash})` : '已更新至最新',
       error: '检查失败，点击重试'
     };
     checkBtn.textContent = statusTextMap[updateState.status] || '检查更新';
@@ -7447,7 +7447,7 @@
     });
 
     const verLabel = document.createElement('span');
-    verLabel.textContent = `v${updateState.currentVersion || PLUGIN_VERSION}`;
+    verLabel.textContent = updateState.currentHash ? `#${updateState.currentHash}` : '';
     verLabel.style.cssText = 'font-size:10px;color:rgba(226,228,233,0.5);';
 
     updateRow.appendChild(checkBtn);
@@ -7633,7 +7633,7 @@
   }
 
   window.__AGY_I18N__ = {
-    version: PLUGIN_VERSION,
+
     handleUpdateEvent,
     checkForUpdates: () => sendUpdateAction('check'),
     isTitleTranslationEnabled,
