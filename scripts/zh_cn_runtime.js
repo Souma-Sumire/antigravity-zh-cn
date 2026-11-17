@@ -1155,6 +1155,8 @@
     "Your plan's baseline quota will refresh on": "您方案的基础额度将于",
     "You can upgrade to a Google AI Ultra plan to receive higher rate limits.": "您可以升级至 Google AI Ultra 方案以获得更高的速率限制。",
     "You can upgrade to a Google AI Ultra plan to receive higher rate limits": "您可以升级至 Google AI Ultra 方案以获取更高的速率限制",
+    "To continue using this model now, enable AI Credit overages.": "如需立即继续使用此模型，请启用 AI 积分超额用量。",
+    "To continue using this model now, enable AI Credit overages": "如需立即继续使用此模型，请启用 AI 积分超额用量",
     "View plans": "查看方案",
     "View Plans": "查看方案",
     "View plan": "查看方案",
@@ -6479,6 +6481,14 @@
       const timeStr = baselineRefreshUpgradeMatch[1].trim();
       const planName = baselineRefreshUpgradeMatch[2].trim();
       return str.replace(trimmed, `您当前方案的基础额度将于 ${timeStr} 刷新。您可以升级至 ${planName} 方案以获取更高的速率限制。`);
+    }
+
+    const baselineRefreshOverageMatch = normalizedKey.match(
+      /^Your plan's baseline quota will refresh on\s+([0-9/: -]+?)\.\s*To continue using this model now,\s*enable AI Credit overages\.?$/i
+    );
+    if (baselineRefreshOverageMatch) {
+      const timeStr = baselineRefreshOverageMatch[1].trim();
+      return str.replace(trimmed, `您当前方案的基础额度将于 ${timeStr} 刷新。如需立即继续使用此模型，请启用 AI 积分超额用量。`);
     }
 
     const baselineRefreshMatch = normalizedKey.match(
