@@ -224,7 +224,11 @@ class ZhCnSidecarBridge {
 
   async handleConsoleMessage(text) {
     if (typeof text !== 'string') return;
-    if (!text.startsWith('__AGY_CONFIG_SYNC__:') && !text.startsWith('__AGY_UPDATE_ACTION__:')) {
+    if (
+      !text.startsWith('__AGY_CONFIG_SYNC__:') &&
+      !text.startsWith('__AGY_UPDATE_ACTION__:') &&
+      !text.startsWith('__AGY_TITLE_CACHE_PUT__:')
+    ) {
       return;
     }
 
@@ -240,7 +244,42 @@ class ZhCnSidecarBridge {
       try {
         const data = JSON.parse(text.slice('__AGY_CONFIG_SYNC__:'.length));
         if (typeof data.enableRemoteTitleTranslation !== 'undefined') {
-          saveTitleTranslateConfig(data.enableRemoteTitleTranslation);
+          const nextEnabled = Boolean(data.enableRemoteTitleTranslation);
+          saveTitleTranslateConfig(nextEnabled);
+          if (nextEnabled) {
+            try {
+              const { syncHistoricalTitles } = require(path.join(scriptsDir, 'sync_historical_titles.js'));
+              const { getCacheMap } = require(path.join(scriptsDir, 'api_translator.js'));
+              Promise.resolve(syncHistoricalTitles()).then(() => {
+                const cacheJson = JSON.stringify(getCacheMap() || {});
+                this.evaluate(`try{window.__AGY_I18N__&&window.__AGY_I18N__.updateTitleCache&&window.__AGY_I18N__.updateTitleCache(${cacheJson});}catch(_){}`).catch(() => {});
+              }).catch(() => {});
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+      return;
+    }
+
+    if (text.startsWith('__AGY_TITLE_CACHE_PUT__:')) {
+      try {
+        const data = JSON.parse(text.slice('__AGY_TITLE_CACHE_PUT__:'.length));
+        const orig = data && typeof data.original === 'string' ? data.original.trim() : '';
+        let trans = data && typeof data.translated === 'string' ? data.translated.trim() : '';
+        if (orig && trans) {
+          const root = path.join(os.homedir(), '.gemini', 'antigravity');
+          try {
+            const { resolveSkillOverrideForTitle } = require(path.join(scriptsDir, 'sync_historical_titles.js'));
+            const override = await resolveSkillOverrideForTitle(root, orig);
+            if (override && override !== trans) {
+              trans = override;
+              this.evaluate(`try{window.__AGY_I18N__&&window.__AGY_I18N__.updateTitleCache&&window.__AGY_I18N__.updateTitleCache(${JSON.stringify({ [orig]: trans })});}catch(_){}`).catch(() => {});
+            }
+          } catch (_) {}
+          try {
+            const { setCachedTranslation } = require(path.join(scriptsDir, 'api_translator.js'));
+            setCachedTranslation(orig, trans);
+          } catch (_) {}
         }
       } catch (_) {}
       return;

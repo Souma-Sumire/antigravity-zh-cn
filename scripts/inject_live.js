@@ -104,14 +104,27 @@ async function injectOnce(action = 'apply') {
     }
   } catch (_) {}
 
+  let titleTransEnabled = false;
+  try {
+    if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1') {
+      titleTransEnabled = true;
+    } else {
+      const configFile = path.join(os.homedir(), '.gemini', 'antigravity', 'translation_config.json');
+      if (fs.existsSync(configFile)) {
+        titleTransEnabled = Boolean(JSON.parse(fs.readFileSync(configFile, 'utf8')).enableRemoteTitleTranslation);
+      }
+    }
+  } catch (_) {}
+
   const runtimeCode = titleCacheCode + fs.readFileSync(runtimeScriptPath, 'utf8');
-  let expr = runtimeCode + '\n;window.__AGY_I18N__ && (window.__AGY_I18N__.apply(), window.__AGY_I18N__.getStats());';
+  const syncCfgExpr = `window.__AGY_I18N__&&window.__AGY_I18N__.syncConfigFromMain(${titleTransEnabled}),`;
+  let expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.apply(), window.__AGY_I18N__.getStats());`;
   if (action === 'toggle') {
-    expr = runtimeCode + '\n;window.__AGY_I18N__ && (window.__AGY_I18N__.toggle(), window.__AGY_I18N__.getStats());';
+    expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.toggle(), window.__AGY_I18N__.getStats());`;
   } else if (action === 'en') {
-    expr = runtimeCode + '\n;window.__AGY_I18N__ && (window.__AGY_I18N__.setLanguage("en-US"), window.__AGY_I18N__.getStats());';
+    expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.setLanguage("en-US"), window.__AGY_I18N__.getStats());`;
   } else if (action === 'zh') {
-    expr = runtimeCode + '\n;window.__AGY_I18N__ && (window.__AGY_I18N__.setLanguage("zh-CN"), window.__AGY_I18N__.getStats());';
+    expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.setLanguage("zh-CN"), window.__AGY_I18N__.getStats());`;
   }
 
   const targets = await httpGetJson(port, '/json/list');

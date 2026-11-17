@@ -3,7 +3,218 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { translateBatchWithApi, isRemoteTranslateEnabled } = require('./api_translator');
+const {
+  translateWithApi,
+  translateBatchWithApi,
+  isRemoteTranslateEnabled,
+  setCachedTranslations,
+  getCacheMap
+} = require('./api_translator');
+
+function parseSkillFrontmatter(skillMdPath) {
+  try {
+    const raw = fs.readFileSync(skillMdPath, 'utf8');
+    const fmMatch = raw.match(/^---\s*\r?\n([\s\S]*?)\r?\n---/);
+    if (!fmMatch) return null;
+    const block = fmMatch[1];
+    const nameMatch = block.match(/^name:\s*(.+)$/m);
+    const descMatch = block.match(/^description:\s*(.+)$/m);
+    const unquote = (v) => (v ? v.trim().replace(/^["']|["']$/g, '').trim() : '');
+    return {
+      name: unquote(nameMatch ? nameMatch[1] : ''),
+      description: unquote(descMatch ? descMatch[1] : '')
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function loadInstalledSkillMetaMap() {
+  const metaMap = new Map();
+  const home = os.homedir();
+  const skillRoots = [
+    path.join(home, '.gemini', 'config', 'skills'),
+    path.join(home, '.gemini', 'antigravity', 'builtin', 'skills')
+  ];
+  const pluginsRoot = path.join(home, '.gemini', 'config', 'plugins');
+  try {
+    if (fs.existsSync(pluginsRoot)) {
+      for (const p of fs.readdirSync(pluginsRoot)) {
+        skillRoots.push(path.join(pluginsRoot, p, 'skills'));
+      }
+    }
+  } catch (_) {}
+
+  for (const dir of skillRoots) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+      for (const entry of fs.readdirSync(dir)) {
+        const full = path.join(dir, entry);
+        try {
+          if (!fs.statSync(full).isDirectory()) continue;
+          const skillMdPath = path.join(full, 'SKILL.md');
+          const meta = fs.existsSync(skillMdPath) ? parseSkillFrontmatter(skillMdPath) : null;
+          const key = entry.toLowerCase();
+          if (!metaMap.has(key)) {
+            metaMap.set(key, {
+              name: (meta && meta.name) || entry,
+              description: (meta && meta.description) || ''
+            });
+          }
+          if (meta && meta.name) {
+            const nameKey = meta.name.toLowerCase();
+            if (!metaMap.has(nameKey)) {
+              metaMap.set(nameKey, {
+                name: meta.name,
+                description: meta.description || ''
+              });
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+  return metaMap;
+}
+
+function readTranscriptHeadLines(transcriptPath, maxBytes = 16384) {
+  let fd = null;
+  try {
+    fd = fs.openSync(transcriptPath, 'r');
+    const buf = Buffer.alloc(maxBytes);
+    const bytesRead = fs.readSync(fd, buf, 0, maxBytes, 0);
+    if (bytesRead <= 0) return [];
+    const text = buf.toString('utf8', 0, bytesRead);
+    return text.split(/\r?\n/).filter(Boolean);
+  } catch (_) {
+    return [];
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
+  }
+}
+
+function detectPureSkillStart(root, conversationId, skillMetaMap) {
+  if (!conversationId) return null;
+  const transcriptPath = path.join(root, 'brain', conversationId, '.system_generated', 'logs', 'transcript.jsonl');
+  if (!fs.existsSync(transcriptPath)) return null;
+
+  const lines = readTranscriptHeadLines(transcriptPath);
+  if (lines.length === 0) return null;
+
+  let firstUserText = null;
+  let readSkillPath = null;
+  let readSkillDirName = null;
+
+  for (let i = 0; i < Math.min(lines.length, 6); i++) {
+    try {
+      const obj = JSON.parse(lines[i]);
+      if (obj.type === 'USER_INPUT' && firstUserText === null) {
+        const rawContent = String(obj.content || '');
+        const reqMatch = rawContent.match(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/i);
+        firstUserText = (reqMatch ? reqMatch[1] : rawContent).trim();
+      } else if (obj.type === 'PLANNER_RESPONSE' && Array.isArray(obj.tool_calls)) {
+        for (const tc of obj.tool_calls) {
+          const p = tc && tc.args && tc.args.Path ? String(tc.args.Path).replace(/^"+|"+$/g, '') : '';
+          const sm = p.match(/[\\/]([a-zA-Z0-9_-]+)[\\/]SKILL\.md$/i);
+          if (sm) {
+            readSkillPath = p;
+            readSkillDirName = sm[1].toLowerCase();
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (!firstUserText) return null;
+  const pureMatch = firstUserText.match(/^\/([a-zA-Z0-9_-]+)\s*$/);
+  if (!pureMatch) return null;
+
+  const skillName = pureMatch[1];
+  const lower = skillName.toLowerCase();
+  const map = skillMetaMap || loadInstalledSkillMetaMap();
+  let meta = map.get(lower) || null;
+
+  if (!meta && readSkillPath && fs.existsSync(readSkillPath)) {
+    meta = parseSkillFrontmatter(readSkillPath);
+  }
+  if (!meta && readSkillDirName !== lower) {
+    return null;
+  }
+
+  return {
+    isPureSkill: true,
+    skillName,
+    displayName: (meta && meta.name) || skillName,
+    description: (meta && meta.description) || ''
+  };
+}
+
+function extractFirstSentence(text) {
+  if (!text || typeof text !== 'string') return '';
+  let s = text.trim();
+  s = s.replace(/^Use when (?:the )?user wants to\s+/i, '');
+  s = s.replace(/^Use when\s+/i, '');
+  s = s.replace(/^当用户需要|^当用户想要|^用于在/i, (m) => m);
+  const firstClause = s.split(/[。！？.!?\n]/)[0].trim();
+  return firstClause;
+}
+
+function shortenChineseSummary(text, maxLen = 18) {
+  if (!text) return '';
+  const cleaned = text.replace(/[“”"']/g, '').replace(/[，,：:；;]+$/, '').trim();
+  if (cleaned.length <= maxLen) return cleaned;
+  return cleaned.slice(0, maxLen).trim();
+}
+
+async function buildSkillTitle(skillHit) {
+  if (!skillHit || !skillHit.displayName) return '';
+  const prefix = `/${skillHit.displayName}`;
+  const rawClause = extractFirstSentence(skillHit.description);
+  if (rawClause) {
+    if (/[\u4e00-\u9fa5]/.test(rawClause)) {
+      const shortZh = shortenChineseSummary(rawClause);
+      if (shortZh) return `${prefix}：${shortZh}`;
+    } else if (isRemoteTranslateEnabled()) {
+      try {
+        const trans = await translateWithApi(rawClause.slice(0, 120));
+        if (trans && /[\u4e00-\u9fa5]/.test(trans)) {
+          const shortZh = shortenChineseSummary(trans);
+          if (shortZh) return `${prefix}：${shortZh}`;
+        }
+      } catch (_) {}
+    }
+  }
+  return `${prefix} 技能会话`;
+}
+
+async function resolveSkillOverrideForTitle(root, originalTitle) {
+  if (!originalTitle || typeof originalTitle !== 'string') return null;
+  const target = originalTitle.trim();
+  const sqlite = getSqliteModule();
+  const dbPath = path.join(root, 'conversation_summaries.db');
+  const skillMetaMap = loadInstalledSkillMetaMap();
+
+  if (sqlite && fs.existsSync(dbPath)) {
+    let db = null;
+    try {
+      db = new sqlite.DatabaseSync(dbPath);
+      const rows = db.prepare('SELECT conversation_id FROM conversation_summaries WHERE title = ? ORDER BY last_modified_time DESC LIMIT 5').all(target);
+      for (const r of rows) {
+        const hit = detectPureSkillStart(root, r.conversation_id, skillMetaMap);
+        if (hit) return await buildSkillTitle(hit);
+      }
+    } catch (_) {
+    } finally {
+      if (db) {
+        try { db.close(); } catch (_) {}
+      }
+    }
+  }
+  return null;
+}
 
 function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -218,6 +429,33 @@ async function syncHistoricalTitles() {
     repairCorruptedTitles(root, sqlite);
   } catch (_) {}
 
+  // 若存在旧版遗留的历史写回备份，先将有效译文迁移至缓存并将数据库与 pbtxt 还原为英文原文
+  const manifestPath = path.join(root, 'historical_titles_backup.json');
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (Array.isArray(manifest)) {
+        const migrated = {};
+        for (const item of manifest) {
+          if (
+            item &&
+            item.original &&
+            item.translated &&
+            !isCorruptedText(item.original) &&
+            !isCorruptedText(item.translated) &&
+            !/[\u4e00-\u9fa5]/.test(item.original)
+          ) {
+            migrated[item.original.trim()] = item.translated.trim();
+          }
+        }
+        setCachedTranslations(migrated);
+      }
+    } catch (_) {}
+    try {
+      await revertHistoricalTitles();
+    } catch (_) {}
+  }
+
   if (!isRemoteTranslateEnabled()) {
     return {
       success: true,
@@ -230,10 +468,9 @@ async function syncHistoricalTitles() {
 
   const annotationsDir = path.join(root, 'annotations');
   const dbPath = path.join(root, 'conversation_summaries.db');
+  const installedSkills = loadInstalledSkillMetaMap();
 
-  const pendingPbtxtFiles = [];
-  const pendingDbRows = [];
-  const pendingFtsRows = [];
+  const titleByConvId = new Map();
   const titlesToTranslate = new Set();
 
   function isTitleNeedingTranslation(title) {
@@ -244,47 +481,31 @@ async function syncHistoricalTitles() {
     return /[a-zA-Z]{3,}/.test(s) && !/^(?:UI|UX|FFXIV|Git|PR)$/.test(s);
   }
 
-  // 1. 扫描 SQLite 本地会话摘要数据库（包含主表与全文检索表）
+  // 1. 只读扫描 SQLite 本地会话摘要数据库（主表与全文检索表）
   if (sqlite && fs.existsSync(dbPath)) {
     try {
       const db = new sqlite.DatabaseSync(dbPath);
-
-      // 1.1 扫描 conversation_summaries 主表
       const rows = db.prepare('SELECT conversation_id, title FROM conversation_summaries').all();
-      const existingSummaryMap = new Map();
       for (const r of rows) {
         const orig = (r.title || '').trim();
-        existingSummaryMap.set(r.conversation_id, orig);
         if (isTitleNeedingTranslation(orig)) {
-          titlesToTranslate.add(orig);
-          pendingDbRows.push({ conversation_id: r.conversation_id, title: orig });
+          titleByConvId.set(r.conversation_id, orig);
         }
       }
-
-      // 1.2 扫描 conversations_fts 全文索引表（提取归档会话标题及主表缺失的标题）
       try {
         const ftsRows = db.prepare("SELECT conversation_id, title FROM conversations_fts WHERE title != ''").all();
         for (const r of ftsRows) {
           const orig = (r.title || '').trim();
-          if (isTitleNeedingTranslation(orig)) {
-            titlesToTranslate.add(orig);
-            pendingFtsRows.push({ conversation_id: r.conversation_id, title: orig });
-
-            // 若主表中该会话存在但 title 为空，同步加入主表更新列表
-            const hasInSummary = existingSummaryMap.has(r.conversation_id);
-            const sumTitle = existingSummaryMap.get(r.conversation_id);
-            if (hasInSummary && !sumTitle) {
-              pendingDbRows.push({ conversation_id: r.conversation_id, title: orig });
-            }
+          if (isTitleNeedingTranslation(orig) && !titleByConvId.has(r.conversation_id)) {
+            titleByConvId.set(r.conversation_id, orig);
           }
         }
       } catch (_) {}
-
       db.close();
     } catch (_) {}
   }
 
-  // 2. 扫描 annotations/*.pbtxt 文件
+  // 2. 只读扫描 annotations/*.pbtxt 文件
   if (fs.existsSync(annotationsDir)) {
     const files = fs.readdirSync(annotationsDir).filter((f) => f.endsWith('.pbtxt'));
     for (const file of files) {
@@ -293,135 +514,54 @@ async function syncHistoricalTitles() {
         const content = fs.readFileSync(fullPath, 'utf8');
         const match = content.match(/title:\s*"([^"]+)"/);
         if (!match) continue;
-
-        const originalTitle = match[1].trim();
-        if (!isTitleNeedingTranslation(originalTitle)) continue;
-
-        pendingPbtxtFiles.push({
-          file,
-          fullPath,
-          content,
-          originalTitle
-        });
-        titlesToTranslate.add(originalTitle);
+        const orig = match[1].trim();
+        const convId = file.replace(/\.pbtxt$/, '');
+        if (isTitleNeedingTranslation(orig) && !titleByConvId.has(convId)) {
+          titleByConvId.set(convId, orig);
+        }
       } catch (_) {}
     }
   }
 
-  if (titlesToTranslate.size === 0) {
-    return { success: true, count: 0, items: [] };
-  }
-
-  // 3. 批量并发翻译所有待处理标题
-  const transMap = await translateBatchWithApi(Array.from(titlesToTranslate));
   const updatedItems = [];
-  const recorded = new Set();
+  const skillOverrides = {};
+  const cacheMap = getCacheMap();
 
-  // 4. 写回 SQLite 数据库（主表及 FTS 表）
-  if (sqlite && (pendingDbRows.length > 0 || pendingFtsRows.length > 0) && fs.existsSync(dbPath)) {
-    let db = null;
-    let inTx = false;
-    try {
-      db = new sqlite.DatabaseSync(dbPath);
-      const updateSumStmt = db.prepare('UPDATE conversation_summaries SET title = ? WHERE conversation_id = ?');
-
-      let updateFtsStmt = null;
-      try {
-        updateFtsStmt = db.prepare('UPDATE conversations_fts SET title = ? WHERE conversation_id = ?');
-      } catch (_) {}
-
-      db.exec('BEGIN TRANSACTION');
-      inTx = true;
-
-      for (const row of pendingDbRows) {
-        const trans = transMap[row.title];
-        if (trans && trans !== row.title) {
-          updateSumStmt.run(trans, row.conversation_id);
-          const key = `${row.conversation_id}:${row.title}`;
-          if (!recorded.has(key)) {
-            recorded.add(key);
-            updatedItems.push({
-              type: 'db',
-              id: row.conversation_id,
-              original: row.title,
-              translated: trans
-            });
-          }
-        }
+  for (const [convId, orig] of titleByConvId.entries()) {
+    const skillHit = detectPureSkillStart(root, convId, installedSkills);
+    if (skillHit) {
+      const suggestedTitle = await buildSkillTitle(skillHit);
+      if (suggestedTitle && cacheMap[orig] !== suggestedTitle) {
+        skillOverrides[orig] = suggestedTitle;
+        updatedItems.push({
+          type: 'skill-cache',
+          id: convId,
+          original: orig,
+          translated: suggestedTitle
+        });
       }
-
-      if (updateFtsStmt) {
-        for (const row of pendingFtsRows) {
-          const trans = transMap[row.title];
-          if (trans && trans !== row.title) {
-            try {
-              updateFtsStmt.run(trans, row.conversation_id);
-              const key = `${row.conversation_id}:${row.title}`;
-              if (!recorded.has(key)) {
-                recorded.add(key);
-                updatedItems.push({
-                  type: 'fts',
-                  id: row.conversation_id,
-                  original: row.title,
-                  translated: trans
-                });
-              }
-            } catch (_) {}
-          }
-        }
-      }
-
-      db.exec('COMMIT');
-      inTx = false;
-    } catch (err) {
-      if (db && inTx) {
-        try { db.exec('ROLLBACK'); } catch (_) {}
-      }
-    } finally {
-      if (db) {
-        try { db.close(); } catch (_) {}
-      }
+      continue;
+    }
+    if (!cacheMap[orig]) {
+      titlesToTranslate.add(orig);
     }
   }
 
-  // 5. 写回 annotations/*.pbtxt 文件
-  for (const item of pendingPbtxtFiles) {
-    const { file, fullPath, content, originalTitle } = item;
-    const translatedTitle = transMap[originalTitle];
-    if (!translatedTitle || translatedTitle === originalTitle) continue;
-
-    try {
-      const titleRegex = new RegExp(`title:\\s*"${escapeRegExp(originalTitle)}"`);
-      if (titleRegex.test(content)) {
-        const escaped = escapePbtxtString(translatedTitle);
-        const newContent = content.replace(titleRegex, () => `title: "${escaped}"`);
-        if (newContent !== content) {
-          fs.writeFileSync(fullPath, newContent, 'utf8');
-          const key = `${file}:${originalTitle}`;
-          if (!recorded.has(key)) {
-            recorded.add(key);
-            updatedItems.push({
-              type: 'pbtxt',
-              file,
-              original: originalTitle,
-              translated: translatedTitle
-            });
-          }
-        }
-      }
-    } catch (_) {}
+  if (Object.keys(skillOverrides).length > 0) {
+    setCachedTranslations(skillOverrides);
   }
 
-  if (updatedItems.length > 0) {
-    try {
-      const manifestPath = path.join(root, 'historical_titles_backup.json');
-      let manifest = [];
-      if (fs.existsSync(manifestPath)) {
-        manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  if (titlesToTranslate.size > 0) {
+    const transMap = await translateBatchWithApi(Array.from(titlesToTranslate));
+    for (const [orig, trans] of Object.entries(transMap)) {
+      if (trans && trans !== orig) {
+        updatedItems.push({
+          type: 'api-cache',
+          original: orig,
+          translated: trans
+        });
       }
-      manifest.push(...updatedItems);
-      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
-    } catch (_) {}
+    }
   }
 
   return {
@@ -461,6 +601,10 @@ async function revertHistoricalTitles() {
     try {
       db = new sqlite.DatabaseSync(dbPath);
       const updateSum = db.prepare('UPDATE conversation_summaries SET title = ? WHERE conversation_id = ? AND title = ?');
+      let updatePreview = null;
+      try {
+        updatePreview = db.prepare('UPDATE conversation_summaries SET preview = ? WHERE conversation_id = ? AND preview = ?');
+      } catch (_) {}
       let updateFts = null;
       try {
         updateFts = db.prepare('UPDATE conversations_fts SET title = ? WHERE conversation_id = ? AND title = ?');
@@ -473,6 +617,9 @@ async function revertHistoricalTitles() {
         if (item.type === 'db' && item.id && item.original && item.translated) {
           try {
             updateSum.run(item.original, item.id, item.translated);
+            if (updatePreview) {
+              updatePreview.run(item.original, item.id, item.translated);
+            }
             restoredCount++;
           } catch (_) {}
         } else if (item.type === 'fts' && item.id && item.original && item.translated && updateFts) {
@@ -521,7 +668,9 @@ async function revertHistoricalTitles() {
 
 module.exports = {
   syncHistoricalTitles,
-  revertHistoricalTitles
+  revertHistoricalTitles,
+  detectPureSkillStart,
+  resolveSkillOverrideForTitle
 };
 
 if (require.main === module) {

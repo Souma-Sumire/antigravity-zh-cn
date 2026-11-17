@@ -40,8 +40,13 @@ if (shouldRun) {
       } catch (_) {}
     }
 
-    // 默认仅执行轻量实时界面注入，严禁默认扫描/改写数据库或外传会话标题
-    const runnerCode = enableRemote
+    let hasLegacyBackup = false;
+    try {
+      hasLegacyBackup = fs.existsSync(path.join(os.homedir(), '.gemini', 'antigravity', 'historical_titles_backup.json'));
+    } catch (_) {}
+
+    // 仅清理历史回滚备份或在开启远程标题翻译时增量更新缓存，绝不改写数据库
+    const runnerCode = (enableRemote || hasLegacyBackup)
       ? `
         try {
           const { syncHistoricalTitles } = require(${JSON.stringify(syncScript)});

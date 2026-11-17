@@ -6367,7 +6367,7 @@
       return str.replace(trimmed, () => EXACT_MAP[normalizedKey]);
     }
 
-    const titleCache = window.__AGY_TITLE_CACHE__;
+    const titleCache = (currentLang === 'zh-CN' && isTitleTranslationEnabled()) ? window.__AGY_TITLE_CACHE__ : null;
     if (titleCache) {
       if (titleCache[trimmed]) {
         return str.replace(trimmed, () => titleCache[trimmed]);
@@ -7187,21 +7187,11 @@
     } catch (_) {}
     console.log('__AGY_CONFIG_SYNC__:' + JSON.stringify({ enableRemoteTitleTranslation: Boolean(enabled) }));
 
-    if (!enabled) {
-      window.__AGY_TITLE_CACHE__ = {};
-      try {
-        window.localStorage.removeItem(TITLE_CACHE_STORAGE_KEY);
-      } catch (_) {}
-      if (currentLang === 'zh-CN') {
-        restoreAllToEnglish();
-        state.nodeMap = new WeakMap();
-        state.translatedNodes.clear();
-        walkAndTranslate(document.body);
-      }
-    } else {
-      if (currentLang === 'zh-CN') {
-        walkAndTranslate(document.body);
-      }
+    if (currentLang === 'zh-CN') {
+      restoreAllToEnglish();
+      state.nodeMap = new WeakMap();
+      state.translatedNodes.clear();
+      walkAndTranslate(document.body);
     }
   }
 
@@ -7241,8 +7231,21 @@
           try {
             window.localStorage.setItem(TITLE_CACHE_STORAGE_KEY, JSON.stringify(window.__AGY_TITLE_CACHE__));
           } catch (_) {}
-          if (node && node.parentNode && node.nodeValue && node.nodeValue.includes(s)) {
-            node.nodeValue = node.nodeValue.replace(s, trans);
+          try {
+            console.log('__AGY_TITLE_CACHE_PUT__:' + JSON.stringify({ original: s, translated: trans }));
+          } catch (_) {}
+          if (isTitleTranslationEnabled() && currentLang === 'zh-CN' && node && node.parentNode && node.nodeValue && node.nodeValue.includes(s)) {
+            const origVal = node.nodeValue;
+            const nextVal = origVal.replace(s, trans);
+            if (nextVal !== origVal) {
+              if (!state.nodeMap.has(node)) {
+                state.nodeMap.set(node, { orig: origVal, trans: nextVal });
+              } else {
+                state.nodeMap.get(node).trans = nextVal;
+              }
+              state.translatedNodes.add(node);
+              node.nodeValue = nextVal;
+            }
           }
         }
       }
@@ -7653,10 +7656,29 @@
     setTitleTranslationEnabled,
     syncConfigFromMain: (enabled) => {
       if (typeof enabled === 'boolean') {
-        const stored = window.localStorage.getItem(TITLE_TRANS_STORAGE_KEY);
-        if (stored === null) {
+        const prev = isTitleTranslationEnabled();
+        try {
           window.localStorage.setItem(TITLE_TRANS_STORAGE_KEY, enabled ? '1' : '0');
+        } catch (_) {}
+        if (prev !== enabled && currentLang === 'zh-CN') {
+          restoreAllToEnglish();
+          state.nodeMap = new WeakMap();
+          state.translatedNodes.clear();
+          walkAndTranslate(document.body);
         }
+      }
+    },
+    updateTitleCache: (entries) => {
+      if (!entries || typeof entries !== 'object') return;
+      window.__AGY_TITLE_CACHE__ = Object.assign(window.__AGY_TITLE_CACHE__ || {}, entries);
+      try {
+        window.localStorage.setItem(TITLE_CACHE_STORAGE_KEY, JSON.stringify(window.__AGY_TITLE_CACHE__));
+      } catch (_) {}
+      if (currentLang === 'zh-CN' && isTitleTranslationEnabled()) {
+        restoreAllToEnglish();
+        state.nodeMap = new WeakMap();
+        state.translatedNodes.clear();
+        walkAndTranslate(document.body);
       }
     },
     getLanguage: () => currentLang,
@@ -7783,13 +7805,13 @@
 
     if (/^(?:The\s+)?Agent finished:\s*/i.test(s)) {
       const rest = s.replace(/^(?:The\s+)?Agent finished:\s*/i, "").trim();
-      const titleCache = window.__AGY_TITLE_CACHE__ || {};
+      const titleCache = (currentLang === 'zh-CN' && isTitleTranslationEnabled()) ? (window.__AGY_TITLE_CACHE__ || {}) : {};
       const transRest = titleCache[rest] || translateText(rest) || rest;
       return `Agent 已完成：${transRest}`;
     }
     if (/^(?:The\s+)?Subagent finished:\s*/i.test(s)) {
       const rest = s.replace(/^(?:The\s+)?Subagent finished:\s*/i, "").trim();
-      const titleCache = window.__AGY_TITLE_CACHE__ || {};
+      const titleCache = (currentLang === 'zh-CN' && isTitleTranslationEnabled()) ? (window.__AGY_TITLE_CACHE__ || {}) : {};
       const transRest = titleCache[rest] || translateText(rest) || rest;
       return `子 Agent 已完成：${transRest}`;
     }

@@ -527,6 +527,36 @@ function getCachedTranslation(text) {
   return memoryCache[trimmed] || null;
 }
 
+function setCachedTranslation(orig, trans) {
+  if (!orig || !trans || typeof orig !== 'string' || typeof trans !== 'string') return false;
+  const k = orig.trim();
+  const v = trans.trim();
+  if (!k || !v || /[\u4e00-\u9fa5]/.test(k)) return false;
+  if (!isValidTranslationText(k) || !isValidTranslationText(v)) return false;
+  if (memoryCache[k] === v) return false;
+  memoryCache[k] = v;
+  saveCache();
+  return true;
+}
+
+function setCachedTranslations(entries) {
+  if (!entries || typeof entries !== 'object') return 0;
+  let updated = 0;
+  for (const [orig, trans] of Object.entries(entries)) {
+    if (!orig || !trans || typeof orig !== 'string' || typeof trans !== 'string') continue;
+    const k = orig.trim();
+    const v = trans.trim();
+    if (!k || !v || /[\u4e00-\u9fa5]/.test(k)) continue;
+    if (!isValidTranslationText(k) || !isValidTranslationText(v)) continue;
+    if (memoryCache[k] !== v) {
+      memoryCache[k] = v;
+      updated++;
+    }
+  }
+  if (updated > 0) saveCache();
+  return updated;
+}
+
 async function translateBatchWithApi(texts) {
   if (!Array.isArray(texts) || texts.length === 0) return {};
   if (!isRemoteTranslateEnabled()) {
@@ -590,10 +620,14 @@ module.exports = {
   translateWithApi,
   translateBatchWithApi,
   getCachedTranslation,
+  setCachedTranslation,
+  setCachedTranslations,
   getCacheMap: () => memoryCache,
+  applyTermProtection,
   formatPangu,
   getProxyConfig,
   requestMicrosoftTranslate,
   requestGoogleTranslate,
-  isRemoteTranslateEnabled
+  isRemoteTranslateEnabled,
+  CACHE_FILE
 };

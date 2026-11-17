@@ -482,13 +482,15 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     if (/^Agent finished:\s*/i.test(s)) {
       const rest = s.replace(/^Agent finished:\s*/i, '').trim();
       let transRest = rest;
-      try {
-        const cachePath = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
-        if (fs.existsSync(cachePath)) {
-          const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-          if (cache[rest]) transRest = cache[rest];
-        }
-      } catch (_) {}
+      if (isTitleTranslateConfigEnabled()) {
+        try {
+          const cachePath = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
+          if (fs.existsSync(cachePath)) {
+            const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+            if (cache[rest]) transRest = cache[rest];
+          }
+        } catch (_) {}
+      }
       return `Agent 已完成：${transRest}`;
     }
     if (/^Subagent finished:\s*/i.test(s)) {
@@ -853,9 +855,60 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         try {
           const data = JSON.parse(message.slice('__AGY_CONFIG_SYNC__:'.length));
           if (typeof data.enableRemoteTitleTranslation !== 'undefined') {
-            saveTitleTranslateConfig(data.enableRemoteTitleTranslation);
+            const nextEnabled = Boolean(data.enableRemoteTitleTranslation);
+            saveTitleTranslateConfig(nextEnabled);
+            if (electron.BrowserWindow && typeof electron.BrowserWindow.getAllWindows === 'function') {
+              for (const win of electron.BrowserWindow.getAllWindows()) {
+                if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed() && win.webContents !== wc) {
+                  win.webContents.executeJavaScript(`try{window.__AGY_I18N__&&window.__AGY_I18N__.syncConfigFromMain&&window.__AGY_I18N__.syncConfigFromMain(${nextEnabled});}catch(_){}`, true).catch(() => {});
+                }
+              }
+            }
+            if (nextEnabled) {
+              try {
+                const syncScript = path.join(PLUGIN_ROOT, 'scripts', 'sync_historical_titles.js');
+                const { syncHistoricalTitles } = require(syncScript);
+                const { getCacheMap } = require(path.join(PLUGIN_ROOT, 'scripts', 'api_translator.js'));
+                Promise.resolve(syncHistoricalTitles()).then(() => {
+                  const cacheJson = JSON.stringify(getCacheMap() || {});
+                  if (electron.BrowserWindow && typeof electron.BrowserWindow.getAllWindows === 'function') {
+                    for (const win of electron.BrowserWindow.getAllWindows()) {
+                      if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+                        win.webContents.executeJavaScript(`try{window.__AGY_I18N__&&window.__AGY_I18N__.updateTitleCache&&window.__AGY_I18N__.updateTitleCache(${cacheJson});}catch(_){}`, true).catch(() => {});
+                      }
+                    }
+                  }
+                }).catch(() => {});
+              } catch (_) {}
+            }
           }
         } catch (_) {}
+      }
+      if (typeof message === 'string' && message.startsWith('__AGY_TITLE_CACHE_PUT__:')) {
+        (async () => {
+          try {
+            const data = JSON.parse(message.slice('__AGY_TITLE_CACHE_PUT__:'.length));
+            const orig = data && typeof data.original === 'string' ? data.original.trim() : '';
+            let trans = data && typeof data.translated === 'string' ? data.translated.trim() : '';
+            if (orig && trans) {
+              const root = path.join(os.homedir(), '.gemini', 'antigravity');
+              try {
+                const { resolveSkillOverrideForTitle } = require(path.join(PLUGIN_ROOT, 'scripts', 'sync_historical_titles.js'));
+                const override = await resolveSkillOverrideForTitle(root, orig);
+                if (override && override !== trans) {
+                  trans = override;
+                  if (!wc.isDestroyed()) {
+                    wc.executeJavaScript(`try{window.__AGY_I18N__&&window.__AGY_I18N__.updateTitleCache&&window.__AGY_I18N__.updateTitleCache(${JSON.stringify({ [orig]: trans })});}catch(_){}`, true).catch(() => {});
+                  }
+                }
+              } catch (_) {}
+              try {
+                const { setCachedTranslation } = require(path.join(PLUGIN_ROOT, 'scripts', 'api_translator.js'));
+                setCachedTranslation(orig, trans);
+              } catch (_) {}
+            }
+          } catch (_) {}
+        })();
       }
       if (typeof message === 'string' && message.startsWith('__AGY_UPDATE_ACTION__:')) {
         (async () => {
