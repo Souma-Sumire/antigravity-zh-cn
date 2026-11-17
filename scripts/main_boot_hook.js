@@ -362,14 +362,33 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         };
       }
 
+      function translateMenuItemsInPlace(menuInstance) {
+        if (!menuInstance || !Array.isArray(menuInstance.items)) return;
+        for (const item of menuInstance.items) {
+          if (!item || typeof item !== 'object') continue;
+          try {
+            const cleanLabel = typeof item.label === 'string' ? item.label.replace(/&/g, '') : '';
+            const roleKey = typeof item.role === 'string' ? item.role.toLowerCase() : '';
+            const translated = translateLabelString(cleanLabel) || (roleKey && ROLE_MAP[roleKey]) || '';
+            if (translated && translated !== item.label) {
+              item.label = translated;
+            }
+          } catch (_) {}
+          if (item.submenu && Array.isArray(item.submenu.items)) {
+            translateMenuItemsInPlace(item.submenu);
+          }
+        }
+      }
+
       if (electron.Tray && electron.Tray.prototype && typeof electron.Tray.prototype.setContextMenu === 'function') {
         const origSetContextMenu = electron.Tray.prototype.setContextMenu;
         electron.Tray.prototype.setContextMenu = function (menu) {
-          if (menu && Array.isArray(menu.items)) {
-            attachMutableLabelAccessor(menu);
-            const rebuilt = origBuildFromTemplate(translateMenuTemplate(menu.items, false));
-            return origSetContextMenu.call(this, rebuilt);
-          }
+          try {
+            if (menu && Array.isArray(menu.items)) {
+              attachMutableLabelAccessor(menu);
+              translateMenuItemsInPlace(menu);
+            }
+          } catch (_) {}
           return origSetContextMenu.call(this, menu);
         };
       }
