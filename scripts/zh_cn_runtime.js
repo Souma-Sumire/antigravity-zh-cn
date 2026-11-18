@@ -6715,8 +6715,8 @@
 
   function shouldSkipElement(el, options) {
     if (!el || el.nodeType !== 1) return true;
-    const allowTextareaAttr = Boolean(options && options.allowTextareaAttr && el.tagName === 'TEXTAREA');
-    if (SKIP_TAGS.has(el.tagName) && !allowTextareaAttr) return true;
+    const allowFormAttr = Boolean(options && (options.allowInputAttr || options.allowTextareaAttr) && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT'));
+    if (SKIP_TAGS.has(el.tagName) && !(allowFormAttr && el.tagName === 'TEXTAREA')) return true;
     if (el.id === 'agy-zh-cn-toggle-bar') return true;
     if (
       el.isContentEditable ||
@@ -6730,6 +6730,7 @@
 
     const active = typeof document !== 'undefined' ? document.activeElement : null;
     if (
+      !allowFormAttr &&
       active &&
       (active.isContentEditable ||
         active.tagName === 'INPUT' ||
@@ -6937,7 +6938,7 @@
 
   function processAttributes(el) {
     if (!el || el.nodeType !== 1 || el.id === 'agy-zh-cn-toggle-bar') return;
-    if (shouldSkipElement(el, { allowTextareaAttr: true })) return;
+    if (shouldSkipElement(el, { allowInputAttr: true })) return;
     for (let i = 0; i < ATTR_LIST.length; i++) {
       const attr = ATTR_LIST[i];
       const val = el.getAttribute(attr);
@@ -6986,7 +6987,7 @@
     }
     if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
     if (root.nodeType === 1) {
-      if (root.tagName === 'TEXTAREA') {
+      if (root.tagName === 'TEXTAREA' || root.tagName === 'INPUT') {
         processAttributes(root);
         return;
       }
@@ -7014,7 +7015,7 @@
             if (node.closest && node.closest(SKIP_CLOSEST_SELECTOR)) {
               return NodeFilter.FILTER_REJECT;
             }
-            if (node.tagName === 'TEXTAREA') {
+            if (node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') {
               processAttributes(node);
               return NodeFilter.FILTER_REJECT;
             }
