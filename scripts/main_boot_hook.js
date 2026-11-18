@@ -275,22 +275,29 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         const translateAgentLabel = (lbl) => {
           if (!lbl || typeof lbl !== 'string') return lbl;
           const trimmed = lbl.trim();
-          return translateLabel(trimmed) || MENU_MAP[trimmed] || lbl;
+          return translateLabelString(trimmed) || MENU_MAP[trimmed] || lbl;
         };
 
-        let currentLabel = translateAgentLabel(item.label || 'No agents running');
         try {
-          Object.defineProperty(item, 'label', {
-            get() {
-              return currentLabel;
-            },
-            set(val) {
-              currentLabel = translateAgentLabel(val);
-            },
-            configurable: true,
-            enumerable: true
-          });
-          item.__agyMutableLabelAttached = true;
+          const proto = Object.getPrototypeOf(item);
+          const origDesc = proto ? Object.getOwnPropertyDescriptor(proto, 'label') : null;
+          if (origDesc && typeof origDesc.get === 'function' && typeof origDesc.set === 'function') {
+            const initial = translateAgentLabel(origDesc.get.call(item) || 'No agents running');
+            if (initial && initial !== origDesc.get.call(item)) {
+              origDesc.set.call(item, initial);
+            }
+            Object.defineProperty(item, 'label', {
+              get() {
+                return origDesc.get.call(this);
+              },
+              set(val) {
+                origDesc.set.call(this, translateAgentLabel(val));
+              },
+              configurable: true,
+              enumerable: true
+            });
+            item.__agyMutableLabelAttached = true;
+          }
         } catch (_) {}
       }
     }
@@ -347,8 +354,18 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       const origBuildFromTemplate = electron.Menu.buildFromTemplate.bind(electron.Menu);
 
       electron.Menu.buildFromTemplate = function (template) {
-        const menu = origBuildFromTemplate(translateMenuTemplate(template, false));
-        return attachMutableLabelAccessor(menu);
+        let translatedTemplate = template;
+        try {
+          translatedTemplate = translateMenuTemplate(template, false);
+        } catch (_) {
+          translatedTemplate = template;
+        }
+        const menu = origBuildFromTemplate(translatedTemplate);
+        try {
+          return attachMutableLabelAccessor(menu);
+        } catch (_) {
+          return menu;
+        }
       };
 
       if (typeof electron.Menu.setApplicationMenu === 'function') {
