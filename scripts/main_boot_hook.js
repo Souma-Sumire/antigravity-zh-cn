@@ -9,6 +9,63 @@ const { spawn } = require('child_process');
 if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   global.__AGY_ZH_CN_MAIN_HOOK_LOADED__ = true;
 
+  const pluginScriptsDir = path.join(os.homedir(), '.gemini', 'config', 'plugins', 'zh-cn-ui', 'scripts');
+  const configPath = path.join(os.homedir(), '.gemini', 'antigravity', 'translation_config.json');
+  let cachedLanguageConfig = null;
+  let cachedTitleTranslateEnabled = null;
+
+  function readConfigJson() {
+    try {
+      if (fs.existsSync(configPath)) {
+        return JSON.parse(fs.readFileSync(configPath, 'utf8')) || {};
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  function isTitleTranslateConfigEnabled() {
+    if (process.env.AGY_DISABLE_REMOTE_TRANSLATE === '1' || process.env.AGY_OFFLINE === '1') {
+      return false;
+    }
+    if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1') return true;
+    if (cachedTitleTranslateEnabled === null) {
+      cachedTitleTranslateEnabled = Boolean(readConfigJson().enableRemoteTitleTranslation);
+    }
+    return cachedTitleTranslateEnabled;
+  }
+
+  function saveTitleTranslateConfig(enabled) {
+    const normalized = Boolean(enabled);
+    cachedTitleTranslateEnabled = normalized;
+    try {
+      const dir = path.dirname(configPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const current = readConfigJson();
+      current.enableRemoteTitleTranslation = normalized;
+      fs.writeFileSync(configPath, JSON.stringify(current, null, 2), 'utf8');
+      process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION = normalized ? '1' : '0';
+    } catch (_) {}
+  }
+
+  function getLanguageConfig() {
+    if (cachedLanguageConfig === null) {
+      cachedLanguageConfig = readConfigJson().language === 'en-US' ? 'en-US' : 'zh-CN';
+    }
+    return cachedLanguageConfig;
+  }
+
+  function saveLanguageConfig(lang) {
+    const normalized = lang === 'en-US' ? 'en-US' : 'zh-CN';
+    cachedLanguageConfig = normalized;
+    try {
+      const dir = path.dirname(configPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const current = readConfigJson();
+      current.language = normalized;
+      fs.writeFileSync(configPath, JSON.stringify(current, null, 2), 'utf8');
+    } catch (_) {}
+  }
+
   const MENU_MAP = {
     'Copy Project Name': '复制项目名称',
     'Project Settings': '项目设置',
@@ -268,19 +325,29 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     return null;
   }
 
+  function findPropertyDescriptorOnProto(obj, prop) {
+    let proto = Object.getPrototypeOf(obj);
+    while (proto && proto !== Object.prototype) {
+      const desc = Object.getOwnPropertyDescriptor(proto, prop);
+      if (desc) return desc;
+      proto = Object.getPrototypeOf(proto);
+    }
+    return null;
+  }
+
   function attachMutableLabelAccessor(menuInstance) {
     if (!menuInstance || !Array.isArray(menuInstance.items)) return menuInstance;
     for (const item of menuInstance.items) {
       if (item && item.id === 'running-agents' && !item.__agyMutableLabelAttached) {
         const translateAgentLabel = (lbl) => {
+          if (getLanguageConfig() !== 'zh-CN') return lbl;
           if (!lbl || typeof lbl !== 'string') return lbl;
           const trimmed = lbl.trim();
           return translateLabelString(trimmed) || MENU_MAP[trimmed] || lbl;
         };
 
         try {
-          const proto = Object.getPrototypeOf(item);
-          const origDesc = proto ? Object.getOwnPropertyDescriptor(proto, 'label') : null;
+          const origDesc = findPropertyDescriptorOnProto(item, 'label');
           if (origDesc && typeof origDesc.get === 'function' && typeof origDesc.set === 'function') {
             const initial = translateAgentLabel(origDesc.get.call(item) || 'No agents running');
             if (initial && initial !== origDesc.get.call(item)) {
@@ -304,9 +371,19 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
     return menuInstance;
   }
 
+  const MENU_ITEM_KEYS = [
+    'id', 'type', 'role', 'label', 'sublabel', 'toolTip',
+    'accelerator', 'enabled', 'visible', 'checked', 'click', 'submenu'
+  ];
+
   function translateMenuItemOrTemplate(item, translateTopLevel) {
     if (!item || typeof item !== 'object') return item;
     const copy = Object.assign({}, item);
+    for (const key of MENU_ITEM_KEYS) {
+      if (copy[key] === undefined && item[key] !== undefined) {
+        copy[key] = item[key];
+      }
+    }
 
     const origLabel = copy.label;
     if (typeof item.click === 'function') {
@@ -355,10 +432,12 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
 
       electron.Menu.buildFromTemplate = function (template) {
         let translatedTemplate = template;
-        try {
-          translatedTemplate = translateMenuTemplate(template, false);
-        } catch (_) {
-          translatedTemplate = template;
+        if (getLanguageConfig() === 'zh-CN') {
+          try {
+            translatedTemplate = translateMenuTemplate(template, false);
+          } catch (_) {
+            translatedTemplate = template;
+          }
         }
         const menu = origBuildFromTemplate(translatedTemplate);
         try {
@@ -371,9 +450,11 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       if (typeof electron.Menu.setApplicationMenu === 'function') {
         const origSetApplicationMenu = electron.Menu.setApplicationMenu.bind(electron.Menu);
         electron.Menu.setApplicationMenu = function (menu) {
-          if (menu && Array.isArray(menu.items)) {
-            const rebuilt = origBuildFromTemplate(translateMenuTemplate(menu.items, true));
-            return origSetApplicationMenu(rebuilt);
+          if (getLanguageConfig() === 'zh-CN' && menu && Array.isArray(menu.items)) {
+            try {
+              const rebuilt = origBuildFromTemplate(translateMenuTemplate(menu.items, true));
+              return origSetApplicationMenu(rebuilt);
+            } catch (_) {}
           }
           return origSetApplicationMenu(menu);
         };
@@ -403,7 +484,9 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
           try {
             if (menu && Array.isArray(menu.items)) {
               attachMutableLabelAccessor(menu);
-              translateMenuItemsInPlace(menu);
+              if (getLanguageConfig() === 'zh-CN') {
+                translateMenuItemsInPlace(menu);
+              }
             }
           } catch (_) {}
           return origSetContextMenu.call(this, menu);
@@ -451,6 +534,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   };
 
   function translateDialogOptions(opts) {
+    if (getLanguageConfig() !== 'zh-CN') return opts;
     if (!opts || typeof opts !== 'object') return opts;
     const copy = Object.assign({}, opts);
     if (typeof copy.title === 'string' && DIALOG_TEXT_MAP[copy.title]) {
@@ -594,61 +678,6 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       } catch (_) {}
     }
   } catch (_) {}
-
-  const pluginScriptsDir = path.join(os.homedir(), '.gemini', 'config', 'plugins', 'zh-cn-ui', 'scripts');
-
-  const configPath = path.join(os.homedir(), '.gemini', 'antigravity', 'translation_config.json');
-
-  function isTitleTranslateConfigEnabled() {
-    if (process.env.AGY_DISABLE_REMOTE_TRANSLATE === '1' || process.env.AGY_OFFLINE === '1') {
-      return false;
-    }
-    if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1') return true;
-    try {
-      if (fs.existsSync(configPath)) {
-        const json = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        return Boolean(json.enableRemoteTitleTranslation);
-      }
-    } catch (_) {}
-    return false;
-  }
-
-  function saveTitleTranslateConfig(enabled) {
-    try {
-      const dir = path.dirname(configPath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      let current = {};
-      if (fs.existsSync(configPath)) {
-        current = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      }
-      current.enableRemoteTitleTranslation = Boolean(enabled);
-      fs.writeFileSync(configPath, JSON.stringify(current, null, 2), 'utf8');
-      process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION = enabled ? '1' : '0';
-    } catch (_) {}
-  }
-
-  function getLanguageConfig() {
-    try {
-      if (fs.existsSync(configPath)) {
-        const json = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        if (json.language === 'en-US') return 'en-US';
-      }
-    } catch (_) {}
-    return 'zh-CN';
-  }
-
-  function saveLanguageConfig(lang) {
-    try {
-      const dir = path.dirname(configPath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      let current = {};
-      if (fs.existsSync(configPath)) {
-        current = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      }
-      current.language = lang === 'en-US' ? 'en-US' : 'zh-CN';
-      fs.writeFileSync(configPath, JSON.stringify(current, null, 2), 'utf8');
-    } catch (_) {}
-  }
 
   // 注册主进程翻译 API 桥接
   if (electron.ipcMain && !electron.ipcMain.__agyTitleApiBridgeRegistered) {
@@ -910,9 +939,9 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
             }
             if (nextEnabled) {
               try {
-                const syncScript = path.join(PLUGIN_ROOT, 'scripts', 'sync_historical_titles.js');
+                const syncScript = path.join(pluginScriptsDir, 'sync_historical_titles.js');
                 const { syncHistoricalTitles } = require(syncScript);
-                const { getCacheMap } = require(path.join(PLUGIN_ROOT, 'scripts', 'api_translator.js'));
+                const { getCacheMap } = require(path.join(pluginScriptsDir, 'api_translator.js'));
                 Promise.resolve(syncHistoricalTitles()).then(() => {
                   const cacheJson = JSON.stringify(getCacheMap() || {});
                   if (electron.BrowserWindow && typeof electron.BrowserWindow.getAllWindows === 'function') {
@@ -937,7 +966,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
             if (orig && trans) {
               const root = path.join(os.homedir(), '.gemini', 'antigravity');
               try {
-                const { resolveSkillOverrideForTitle } = require(path.join(PLUGIN_ROOT, 'scripts', 'sync_historical_titles.js'));
+                const { resolveSkillOverrideForTitle } = require(path.join(pluginScriptsDir, 'sync_historical_titles.js'));
                 const override = await resolveSkillOverrideForTitle(root, orig);
                 if (override && override !== trans) {
                   trans = override;
@@ -947,7 +976,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
                 }
               } catch (_) {}
               try {
-                const { setCachedTranslation } = require(path.join(PLUGIN_ROOT, 'scripts', 'api_translator.js'));
+                const { setCachedTranslation } = require(path.join(pluginScriptsDir, 'api_translator.js'));
                 setCachedTranslation(orig, trans);
               } catch (_) {}
             }
