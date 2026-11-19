@@ -6800,6 +6800,12 @@
     '[data-testid="selection-comment-button"]',
     '[data-testid="selection-popup-quote-button"]',
     '[data-testid="selection-code-search-button"]',
+    '[data-testid="html-selection-comment"]',
+    '[data-testid="html-selection-add-to-chat"]',
+    '[data-testid="selection-quote-button"]',
+    '[data-testid="selection-btw-button"]',
+    '[data-testid="pane-selection-add-to-chat"]',
+    '.agy-selection-pill',
     '.selection-popup',
     '[data-testid="gutter-comment-button"]',
     '[data-testid="image-comment-hint"]'
