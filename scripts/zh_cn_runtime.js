@@ -50,6 +50,12 @@
   }
 
   const EXACT_MAP = {
+    "Search Hosts…": "搜索主机…",
+    "Search Hosts...": "搜索主机...",
+    "Find last quarter's budget and share it with Alex": "查找上季度的预算并与 Alex 共享",
+    "Move this week's design exports into the Launch folder": "将本周的设计导出文件移至 Launch 文件夹",
+    "Download the Q3 report as a PDF": "将第三季度报告下载为 PDF",
+    "Find and organize your Google Drive. Search across your files, tidy up folders, share them with the right people, and download or export them as PDF, CSV, or Markdown.": "查找并整理您的 Google 云端硬盘。搜索各类文件、整理文件夹、与合适的人员共享，并下载或导出为 PDF、CSV 或 Markdown 格式。",
     "Keybinding Scheme": "快捷键方案",
     "Customize Shortcuts": "自定义快捷键",
     "Antigravity (AGY) Style": "Antigravity (AGY) 风格",
@@ -5829,6 +5835,16 @@
     [
       /^See less in\s+(.+)$/i,
       '在 $1 中收起'
+    ],
+    [
+      /^No hosts in (.+?) yet(?:\.\s*Type one above\.)?$/i,
+      (_m, p) => _m.includes('Type one above')
+        ? `${p} 中暂无主机，请在上方输入。`
+        : `${p} 中暂无主机`
+    ],
+    [
+      /^Browse, search, and manage Google Drive files and folders\./i,
+      '浏览、搜索与管理 Google 云端硬盘文件和文件夹。适用于用户分享 drive.google.com 链接或操作云端硬盘文件时。'
     ],
     [
       /^No\s+(.+?)\s+yet\.?$/i,
