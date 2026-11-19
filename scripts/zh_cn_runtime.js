@@ -4579,6 +4579,7 @@
     "Copy Image Address": "复制图片地址",
     "Copy Link Address": "复制链接地址",
     "Leave a comment": "留下评论",
+    "Add Comment": "添加评论",
     "No comments yet": "暂无评论",
     "File Comments": "文件评论",
     "Diff Comments": "差异评论",
@@ -6731,6 +6732,7 @@
     '[data-testid="user-message-content"]',
     '[data-testid="user-input-step"] .whitespace-pre-wrap',
     '[data-testid="planner-response-text"]',
+    '[data-testid="comment-card-text"]',
     '[data-testid="entity-pill"]',
     '[data-testid="file-title-name"]',
     '[data-testid="project-header"]',
@@ -6792,6 +6794,39 @@
     );
   }
 
+  const COMMENT_UI_SELECTOR = [
+    '[data-testid="comment-box"]',
+    '[data-testid="comment-card"]',
+    '[data-testid="selection-comment-button"]',
+    '[data-testid="selection-popup-quote-button"]',
+    '[data-testid="selection-code-search-button"]',
+    '.selection-popup',
+    '[data-testid="gutter-comment-button"]',
+    '[data-testid="image-comment-hint"]'
+  ].join(', ');
+
+  function isCommentUiElement(el) {
+    if (!el || typeof el.closest !== 'function') return false;
+    if (!el.closest(COMMENT_UI_SELECTOR)) return false;
+    if (
+      el.isContentEditable ||
+      el.getAttribute('contenteditable') === 'true' ||
+      el.getAttribute('contenteditable') === 'plaintext-only' ||
+      el.getAttribute('contenteditable') === '' ||
+      el.getAttribute('data-lexical-editor') === 'true'
+    ) {
+      return false;
+    }
+    if (
+      el.closest(
+        '[data-lexical-editor="true"], [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-testid="comment-card-text"]'
+      )
+    ) {
+      return false;
+    }
+    return true;
+  }
+
   const MARKDOWN_PROTECTED_ANCESTOR = [
     '[data-testid="planner-response-text"]',
     '[data-testid="user-message-content"]',
@@ -6849,6 +6884,17 @@
 
     const isActionToolbar = isActionToolbarElement(el);
     if (isActionToolbar) {
+      if (isIconElement(el)) {
+        return true;
+      }
+      return false;
+    }
+
+    if (isCommentUiElement(el)) {
+      const codeAncestor = el.closest(SKIP_CODE_SELECTOR);
+      if (codeAncestor && codeAncestor.closest(COMMENT_UI_SELECTOR)) {
+        return true;
+      }
       if (isIconElement(el)) {
         return true;
       }
@@ -6954,7 +7000,7 @@
     if (!currentVal || !currentVal.trim()) return;
 
     if (currentLang === 'zh-CN') {
-      const inMarkdownRoot = Boolean(parent.closest && parent.closest('[data-markdown-root]'));
+      const inMarkdownRoot = Boolean(parent.closest && parent.closest('[data-markdown-root]') && !isCommentUiElement(parent));
       if (!inMarkdownRoot && tryTranslateCompoundTextNodes(parent)) {
         return;
       }
@@ -7086,6 +7132,17 @@
     }
   }
 
+  function translateCommentUiRoots(root) {
+    if (currentLang !== 'zh-CN' || !root || typeof root.querySelectorAll !== 'function') return;
+    if (root.nodeType === 1 && typeof root.closest === 'function' && root.closest(COMMENT_UI_SELECTOR)) return;
+    const targets = root.querySelectorAll(COMMENT_UI_SELECTOR);
+    for (let i = 0; i < targets.length; i++) {
+      const el = targets[i];
+      if (el.parentElement && el.parentElement.closest(COMMENT_UI_SELECTOR)) continue;
+      walkAndTranslate(el);
+    }
+  }
+
   function walkAndTranslate(root) {
     if (!root) return;
     if (root.nodeType === 3) {
@@ -7098,7 +7155,10 @@
         processAttributes(root);
         return;
       }
-      if (shouldSkipElement(root)) return;
+      if (shouldSkipElement(root)) {
+        translateCommentUiRoots(root);
+        return;
+      }
       processAttributes(root);
     }
 
@@ -7110,8 +7170,10 @@
           if (node.nodeType === 1) {
             const inToast = isToastOrNotificationElement(node);
             const inToolbar = isActionToolbarElement(node);
-            if (inToast || inToolbar) {
-              if (node.closest(SKIP_CODE_SELECTOR)) {
+            const inCommentUi = isCommentUiElement(node);
+            if (inToast || inToolbar || inCommentUi) {
+              const codeAncestor = node.closest(SKIP_CODE_SELECTOR);
+              if (codeAncestor && (!inCommentUi || codeAncestor.closest(COMMENT_UI_SELECTOR))) {
                 return NodeFilter.FILTER_REJECT;
               }
               if (isIconElement(node)) {
@@ -7148,6 +7210,7 @@
       }
       curr = walker.nextNode();
     }
+    translateCommentUiRoots(root);
     translateFileTreeSidebarHeaders();
     sanitizeBrandAndWorkspaceHeaders();
   }
