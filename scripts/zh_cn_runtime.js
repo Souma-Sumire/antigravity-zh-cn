@@ -6711,7 +6711,6 @@
     '[contenteditable="true"]',
     '[contenteditable="plaintext-only"]',
     '[contenteditable=""]',
-    '[data-markdown-root]',
     '[data-file-uri]',
     '[data-uri]',
     '[data-quotable-inline="true"]',
@@ -6785,6 +6784,22 @@
     );
   }
 
+  const MARKDOWN_PROTECTED_ANCESTOR = [
+    '[data-testid="planner-response-text"]',
+    '[data-testid="user-message-content"]',
+    '[data-testid="user-message-bubble"]',
+    '[data-testid="user-input-step"]',
+    '[aria-label="File Viewer"]',
+    '[aria-label="文件查看器"]'
+  ].join(', ');
+
+  function isProtectedMarkdownContext(el) {
+    if (!el || typeof el.closest !== 'function') return false;
+    if (!el.closest('[data-markdown-root]')) return false;
+    if (el.closest(SKIP_CODE_SELECTOR)) return true;
+    return Boolean(el.closest(MARKDOWN_PROTECTED_ANCESTOR));
+  }
+
   function shouldSkipElement(el, options) {
     if (!el || el.nodeType !== 1) return true;
     const allowFormAttr = Boolean(options && (options.allowInputAttr || options.allowTextareaAttr) && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT'));
@@ -6835,7 +6850,7 @@
     if (el.closest && el.closest('[data-testid="project-header"], [data-testid*="project-header"], [data-testid="sidebar-project-header"]')) {
       return true;
     }
-    if (el.hasAttribute('data-markdown-root')) {
+    if (isProtectedMarkdownContext(el)) {
       return true;
     }
     if (el.closest && el.closest(SKIP_CLOSEST_SELECTOR)) {
@@ -6931,7 +6946,8 @@
     if (!currentVal || !currentVal.trim()) return;
 
     if (currentLang === 'zh-CN') {
-      if (tryTranslateCompoundTextNodes(parent)) {
+      const inMarkdownRoot = Boolean(parent.closest && parent.closest('[data-markdown-root]'));
+      if (!inMarkdownRoot && tryTranslateCompoundTextNodes(parent)) {
         return;
       }
       let record = state.nodeMap.get(node);
@@ -6945,7 +6961,18 @@
         state.nodeMap.set(node, record);
       }
 
-      let translated = translateText(record.orig);
+      let translated;
+      if (inMarkdownRoot) {
+        const trimmedMd = record.orig.trim();
+        const exactMd = EXACT_MAP[trimmedMd] || EXACT_MAP[trimmedMd.replace(/\s+/g, ' ')];
+        if (exactMd) {
+          const leadingMd = record.orig.match(/^\s*/)[0];
+          const trailingMd = record.orig.match(/\s*$/)[0];
+          translated = leadingMd + formatPangu(exactMd) + trailingMd;
+        }
+      } else {
+        translated = translateText(record.orig);
+      }
       if (!translated && record.orig.trim() === 's' && parent) {
         const hasSlot = Boolean(parent.querySelector && parent.querySelector('[data-slot]'));
         if (hasSlot) {
