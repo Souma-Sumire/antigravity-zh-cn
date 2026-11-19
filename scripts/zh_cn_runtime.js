@@ -5837,6 +5837,14 @@
       '在 $1 中收起'
     ],
     [
+      /^Model unavailable, retrying(?: in (\d+)s)?(?: \(attempt (\d+)\/(\d+)\))?$/i,
+      (_m, sec, cur, total) => {
+        const retryPart = sec ? `${sec} 秒后重试` : '正在重试';
+        const attemptPart = cur && total ? `（第 ${cur}/${total} 次）` : '';
+        return `模型不可用，${retryPart}${attemptPart}`;
+      }
+    ],
+    [
       /^No hosts in (.+?) yet(?:\.\s*Type one above\.)?$/i,
       (_m, p) => _m.includes('Type one above')
         ? `${p} 中暂无主机，请在上方输入。`
@@ -7140,7 +7148,48 @@
       }
       curr = walker.nextNode();
     }
+    translateFileTreeSidebarHeaders();
     sanitizeBrandAndWorkspaceHeaders();
+  }
+
+  function translateFileTreeSidebarHeaders() {
+    if (currentLang !== 'zh-CN' || typeof document === 'undefined') return;
+    const sidebars = document.querySelectorAll('[data-testid="tab-file-tree-sidebar"]');
+    sidebars.forEach((sidebar) => {
+      const buttons = sidebar.querySelectorAll('button, [role="button"]');
+      buttons.forEach((btn) => {
+        if (btn.closest('[role="treeitem"], [data-file-uri], [data-uri], [data-testid="file-title-name"]')) return;
+        processAttributes(btn);
+        const walker = document.createTreeWalker(btn, NodeFilter.SHOW_TEXT);
+        let textNode = walker.nextNode();
+        while (textNode) {
+          const val = textNode.nodeValue;
+          const trimmed = val && val.trim();
+          if (trimmed && !isIconElement(textNode.parentElement)) {
+            const exact = EXACT_MAP[trimmed];
+            if (exact) {
+              let rec = state.nodeMap.get(textNode);
+              if (!rec) {
+                rec = { orig: val, translated: null };
+                state.nodeMap.set(textNode, rec);
+              }
+              if (val !== rec.translated) {
+                rec.orig = val;
+              }
+              const leading = val.match(/^\s*/)[0];
+              const trailing = val.match(/\s*$/)[0];
+              const nextVal = leading + formatPangu(exact) + trailing;
+              rec.translated = nextVal;
+              state.translatedNodes.add(textNode);
+              if (textNode.nodeValue !== nextVal) {
+                textNode.nodeValue = nextVal;
+              }
+            }
+          }
+          textNode = walker.nextNode();
+        }
+      });
+    });
   }
 
   function sanitizeBrandAndWorkspaceHeaders() {
