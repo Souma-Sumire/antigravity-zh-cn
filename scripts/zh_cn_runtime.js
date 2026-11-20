@@ -4721,6 +4721,27 @@
     "Microphone": "麦克风",
     "Input device for voice mode.": "语音模式的音频输入设备。",
     "Voice volume": "语音音量",
+    "Choose Antigravity's Voice": "选择 Antigravity 语音",
+    "Choose Jetski's Voice": "选择 Jetski 语音",
+    "Voices": "语音列表",
+    "Clear and friendly": "清晰友好",
+    "Confident and clear": "自信清晰",
+    "Warm and engaging": "温暖富有感染力",
+    "Warm and approachable": "温暖亲切",
+    "Deep and velvety": "深沉柔和",
+    "Light and precise": "轻盈精准",
+    "later.": "中更改此设置。",
+    "You can change this in Settings later.": "您可以稍后在设置中更改此设置。",
+    "Use": "使用",
+    "Use Fola": "使用 Fola",
+    "Use Arlo": "使用 Arlo",
+    "Use Cleo": "使用 Cleo",
+    "Use Finn": "使用 Finn",
+    "Use Gero": "使用 Gero",
+    "Use Lora": "使用 Lora",
+    "Use Neno": "使用 Neno",
+    "Use Olin": "使用 Olin",
+    "Use Tari": "使用 Tari",
     "Message this chat": "向此对话发送消息",
     "Write a message": "编写消息",
     "Close message": "关闭消息",
@@ -5583,6 +5604,10 @@
     [
       /^(\d+)\s+Drafts?$/i,
       (_m, count) => `${count} 个草稿`
+    ],
+    [
+      /^([A-Za-z]+), voice (\d+) of (\d+)$/i,
+      (_m, name, idx, total) => `${name}，第 ${idx} / ${total} 个语音`
     ],
     [
       /^Handler\s+#(\d+)$/i,
