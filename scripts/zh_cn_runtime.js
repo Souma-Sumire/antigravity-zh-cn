@@ -4765,6 +4765,7 @@
     "Choose which key sends a message in the chat composer.": "选择在对话输入框中发送消息的快捷键。",
     "Enter to send": "按 Enter 发送",
     "Orchestrator": "协调器 (Orchestrator)",
+    "Offloads routine steps to a faster executor. Same quality, fewer tokens used.": "将常规步骤交给更快的执行模型处理，保持同等质量的同时减少 Token 消耗。",
     "Orchestrator Settings": "Orchestrator 设置",
     "Choose the models Orchestrator uses. A larger, smarter orchestrator model with a faster, cheaper executor gives high quality for fewer tokens.": "选择 Orchestrator 使用的模型。将更强大、更智能的协调模型与更快速、更经济的执行模型搭配，可在消耗更少 Token 的同时获得高质量结果。",
     "Orchestrator Model": "Orchestrator 模型",
