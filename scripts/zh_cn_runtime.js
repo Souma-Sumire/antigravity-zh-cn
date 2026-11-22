@@ -7193,6 +7193,16 @@
           }
         }
       }
+      if (!translated && parent && parent.closest && parent.closest('[data-testid="conversation-row-sidebar"], [data-testid*="conversation-row"]')) {
+        const relMatch = record.orig.trim().match(/^(\d+)\s*(mo|w|d|h|m|y)$/i);
+        if (relMatch) {
+          const unitMap = { mo: '个月前', w: '周前', d: '天前', h: '小时前', m: '分钟前', y: '年前' };
+          const unitZh = unitMap[relMatch[2].toLowerCase()];
+          if (unitZh) {
+            translated = formatPangu(`${relMatch[1]} ${unitZh}`);
+          }
+        }
+      }
       if (translated) {
         if (node.nodeValue !== translated) {
           record.translated = translated;
@@ -8359,7 +8369,7 @@
     window.addEventListener('blur', window.__agyBlurHandler);
   }
 
-  const SIDEBAR_UI_VERSION = '7';
+  const SIDEBAR_UI_VERSION = '8';
 
   function mountToggleBadge() {
     ensureZhCnStyles();
@@ -8462,17 +8472,12 @@
       dotEl.setAttribute('aria-hidden', 'true');
       dotEl.style.cssText = 'display:none;width:6px;height:6px;border-radius:9999px;background:var(--primary,#2563eb);';
 
-      const badgeEl = document.createElement('span');
-      badgeEl.className = 'agy-zh-cn-lang-badge';
-      badgeEl.style.cssText = 'font-size:10px;font-weight:500;letter-spacing:0.02em;';
-
       const chevronWrap = document.createElement('span');
       chevronWrap.className = 'flex items-center justify-center';
       chevronWrap.innerHTML =
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>';
 
       rightWrap.appendChild(dotEl);
-      rightWrap.appendChild(badgeEl);
       rightWrap.appendChild(chevronWrap);
       btn.appendChild(iconWrap);
       btn.appendChild(labelEl);
