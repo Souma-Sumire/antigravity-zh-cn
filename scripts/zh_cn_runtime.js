@@ -8055,6 +8055,8 @@
     }
   }
 
+  const SIDEBAR_UI_VERSION = '2';
+
   function mountToggleBadge() {
     try {
       if (window.self !== window.top) return;
@@ -8071,10 +8073,17 @@
     if (!settingsBtn || !settingsBtn.parentElement) return;
 
     let btn = document.getElementById('agy-zh-cn-sidebar-btn');
+    if (btn && btn.getAttribute('data-agy-ui-ver') !== SIDEBAR_UI_VERSION) {
+      if (btn.parentNode) btn.parentNode.removeChild(btn);
+      const staleMenu = document.getElementById('agy-zh-cn-context-menu');
+      if (staleMenu && staleMenu.parentNode) staleMenu.parentNode.removeChild(staleMenu);
+      btn = null;
+    }
     if (!btn) {
       btn = document.createElement('button');
       btn.id = 'agy-zh-cn-sidebar-btn';
       btn.type = 'button';
+      btn.setAttribute('data-agy-ui-ver', SIDEBAR_UI_VERSION);
       btn.setAttribute('translate', 'no');
       btn.setAttribute('data-plugin-id', 'zh-cn-ui');
       btn.setAttribute('data-external-plugin', 'true');
