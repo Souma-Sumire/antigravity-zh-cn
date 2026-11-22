@@ -8223,17 +8223,6 @@
     const actions = document.createElement('div');
     actions.className = 'agy-zh-footer-actions';
 
-    const checkBtn = document.createElement('button');
-    checkBtn.type = 'button';
-    checkBtn.className = 'agy-zh-footer-btn';
-    checkBtn.disabled = isBusy;
-    checkBtn.textContent = isBusy ? '处理中...' : '检查更新';
-    checkBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sendUpdateAction('check');
-    });
-    actions.appendChild(checkBtn);
-
     if (updateState.status === 'available') {
       const actionBtn = document.createElement('button');
       actionBtn.type = 'button';
@@ -8244,6 +8233,17 @@
         sendUpdateAction('update');
       });
       actions.appendChild(actionBtn);
+    } else {
+      const checkBtn = document.createElement('button');
+      checkBtn.type = 'button';
+      checkBtn.className = 'agy-zh-footer-btn';
+      checkBtn.disabled = isBusy;
+      checkBtn.textContent = isBusy ? '处理中...' : '检查更新';
+      checkBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sendUpdateAction('check');
+      });
+      actions.appendChild(checkBtn);
     }
 
     footer.appendChild(actions);
