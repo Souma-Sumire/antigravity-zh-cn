@@ -6824,7 +6824,8 @@
     '.terminal',
     '[data-testid="terminal-container"]',
     '[data-testid="terminal-view"]',
-    '#agy-zh-cn-toggle-bar'
+    '#agy-zh-cn-sidebar-btn',
+    '#agy-zh-cn-context-menu'
   ].join(', ');
 
   const SKIP_CLOSEST_SELECTOR = [
@@ -6970,7 +6971,7 @@
     if (!el || el.nodeType !== 1) return true;
     const allowFormAttr = Boolean(options && (options.allowInputAttr || options.allowTextareaAttr) && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT'));
     if (SKIP_TAGS.has(el.tagName) && !(allowFormAttr && el.tagName === 'TEXTAREA')) return true;
-    if (el.id === 'agy-zh-cn-toggle-bar') return true;
+    if (el.id === 'agy-zh-cn-sidebar-btn' || el.id === 'agy-zh-cn-context-menu') return true;
     if (
       el.isContentEditable ||
       el.getAttribute('contenteditable') === 'true' ||
@@ -7233,7 +7234,7 @@
   }
 
   function processAttributes(el) {
-    if (!el || el.nodeType !== 1 || el.id === 'agy-zh-cn-toggle-bar') return;
+    if (!el || el.nodeType !== 1 || el.id === 'agy-zh-cn-sidebar-btn' || el.id === 'agy-zh-cn-context-menu') return;
     if (shouldSkipElement(el, { allowInputAttr: true })) return;
     for (let i = 0; i < ATTR_LIST.length; i++) {
       const attr = ATTR_LIST[i];
@@ -7762,13 +7763,26 @@
   function showContextMenu() {
     hideContextMenu();
 
+    const anchorBtn = document.getElementById('agy-zh-cn-sidebar-btn');
+    let posLeft = '12px';
+    let posBottom = '44px';
+    if (anchorBtn && typeof anchorBtn.getBoundingClientRect === 'function') {
+      const rect = anchorBtn.getBoundingClientRect();
+      if (rect && rect.width > 0 && rect.height > 0) {
+        posLeft = `${Math.max(8, Math.round(rect.left))}px`;
+        posBottom = `${Math.max(8, Math.round(window.innerHeight - rect.top + 6))}px`;
+      }
+    }
+
     const menu = document.createElement('div');
     menu.id = 'agy-zh-cn-context-menu';
     menu.setAttribute('translate', 'no');
+    menu.setAttribute('data-plugin-id', 'zh-cn-ui');
+    menu.setAttribute('data-external-plugin', 'true');
     menu.style.cssText = [
       'position:fixed',
-      'bottom:34px',
-      'right:10px',
+      `bottom:${posBottom}`,
+      `left:${posLeft}`,
       'z-index:2147483645',
       'padding:6px 10px',
       'border-radius:5px',
@@ -7920,90 +7934,27 @@
   }
 
   function updateToggleBadge() {
-    const btn = document.getElementById('agy-zh-cn-toggle-btn');
-    if (btn) {
-      btn.textContent = currentLang === 'zh-CN' ? '中文' : 'EN';
-      btn.title = currentLang === 'zh-CN'
-        ? '当前界面：简体中文（左键切换语言，右键设置菜单）'
-        : 'Current UI: English (Left-click toggle, right-click settings)';
+    const btn = document.getElementById('agy-zh-cn-sidebar-btn');
+    if (!btn) return;
+    const labelEl = btn.querySelector('.agy-zh-cn-sidebar-label');
+    if (labelEl) {
+      labelEl.textContent = currentLang === 'zh-CN' ? '简体中文' : 'English';
     }
+    const dotEl = btn.querySelector('.agy-zh-cn-update-dot');
+    if (dotEl) {
+      dotEl.style.display = updateState.status === 'available' ? 'inline-block' : 'none';
+    }
+    btn.title = currentLang === 'zh-CN'
+      ? '界面语言：简体中文（点击切换中英文，右键或点右侧图标打开设置）'
+      : 'UI Language: English (Click to toggle, right-click or gear icon for settings)';
   }
 
-  function mountToggleBadge() {
-    try {
-      if (window.self !== window.top) return;
-    } catch (_) {
-      return;
-    }
-    const existing = document.getElementById('agy-zh-cn-toggle-bar');
-    if (existing && existing.parentNode) {
-      existing.parentNode.removeChild(existing);
-    }
-    if (!document.body) return;
-
-    const bar = document.createElement('div');
-    bar.id = 'agy-zh-cn-toggle-bar';
-    bar.setAttribute('translate', 'no');
-    bar.style.cssText = [
-      'position:fixed',
-      'bottom:8px',
-      'right:10px',
-      'z-index:2147483640',
-      'display:inline-flex',
-      'align-items:center',
-      'gap:4px',
-      'font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif',
-      'font-size:11px',
-      'line-height:1',
-      'user-select:none',
-      'pointer-events:auto'
-    ].join(';');
-
-    const btn = document.createElement('button');
-    btn.id = 'agy-zh-cn-toggle-btn';
-    btn.type = 'button';
-    btn.style.cssText = [
-      'padding:3px 6px',
-      'border-radius:3px',
-      'border:1px solid rgba(128,128,128,0.35)',
-      'background:rgba(36,38,42,0.78)',
-      'color:#d4d6db',
-      'font-size:11px',
-      'font-weight:500',
-      'cursor:pointer',
-      'letter-spacing:0.3px'
-    ].join(';');
-
-    btn.addEventListener('click', () => {
-      hideContextMenu();
-      window.__AGY_I18N__.toggle();
-    });
-
-    btn.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (contextMenuEl) {
-        hideContextMenu();
-      } else {
-        showContextMenu();
-      }
-    });
-
-    bar.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (contextMenuEl) {
-        hideContextMenu();
-      } else {
-        showContextMenu();
-      }
-    });
-
+  function ensureOutsideHandlers() {
     const handleOutsideInteraction = (e) => {
       if (!contextMenuEl) return;
       const target = e.target;
       if (target && typeof target.closest === 'function') {
-        if (target.closest('#agy-zh-cn-context-menu') || target.closest('#agy-zh-cn-toggle-bar')) {
+        if (target.closest('#agy-zh-cn-context-menu') || target.closest('#agy-zh-cn-sidebar-btn')) {
           return;
         }
       }
@@ -8027,9 +7978,131 @@
       }, true);
       window.addEventListener('blur', () => hideContextMenu());
     }
+  }
 
-    bar.appendChild(btn);
-    document.body.appendChild(bar);
+  function mountToggleBadge() {
+    try {
+      if (window.self !== window.top) return;
+    } catch (_) {
+      return;
+    }
+    const legacyBar = document.getElementById('agy-zh-cn-toggle-bar');
+    if (legacyBar && legacyBar.parentNode) {
+      legacyBar.parentNode.removeChild(legacyBar);
+    }
+    if (!document.body) return;
+
+    const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
+    if (!settingsBtn || !settingsBtn.parentElement) return;
+
+    let btn = document.getElementById('agy-zh-cn-sidebar-btn');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'agy-zh-cn-sidebar-btn';
+      btn.type = 'button';
+      btn.setAttribute('translate', 'no');
+      btn.setAttribute('data-plugin-id', 'zh-cn-ui');
+      btn.setAttribute('data-external-plugin', 'true');
+
+      btn.addEventListener('click', (e) => {
+        if (e.target && typeof e.target.closest === 'function' && e.target.closest('.agy-zh-cn-gear-btn')) {
+          return;
+        }
+        e.stopPropagation();
+        hideContextMenu();
+        window.__AGY_I18N__.toggle();
+      });
+
+      btn.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (contextMenuEl) {
+          hideContextMenu();
+        } else {
+          showContextMenu();
+        }
+      });
+
+      ensureOutsideHandlers();
+    }
+
+    // 追加在原生设置按钮之后，不打断其它插件（如账号切换器）紧贴 settings-button 上方的相邻约束
+    if (btn.parentElement !== settingsBtn.parentElement || settingsBtn.nextElementSibling !== btn) {
+      settingsBtn.parentElement.insertBefore(btn, settingsBtn.nextSibling);
+    }
+
+    if (btn.className !== settingsBtn.className) {
+      btn.className = settingsBtn.className;
+    }
+
+    const settingsIconEl = settingsBtn.querySelector('span');
+    const settingsTextEl = settingsBtn.querySelector('span.truncate') || settingsBtn.lastElementChild;
+    let iconSize = 16;
+    if (settingsIconEl) {
+      const iconRect = settingsIconEl.getBoundingClientRect();
+      if (iconRect && iconRect.width >= 12 && iconRect.width <= 24) {
+        iconSize = Math.round(iconRect.width);
+      }
+    }
+
+    let textStyle = '';
+    if (settingsTextEl && typeof window.getComputedStyle === 'function') {
+      const textCs = window.getComputedStyle(settingsTextEl);
+      if (textCs && textCs.fontSize) {
+        textStyle = `font-size:${textCs.fontSize};line-height:${textCs.lineHeight};font-weight:${textCs.fontWeight};`;
+      }
+    }
+
+    if (!btn.querySelector('.agy-zh-cn-sidebar-label')) {
+      btn.innerHTML = '';
+
+      const iconWrap = document.createElement('span');
+      iconWrap.className = 'shrink-0 flex items-center justify-center';
+      iconWrap.style.cssText = `width:${iconSize}px;height:${iconSize}px;`;
+      iconWrap.innerHTML =
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<circle cx="12" cy="12" r="10"/>' +
+        '<path d="M2 12h20"/>' +
+        '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>' +
+        '</svg>';
+
+      const labelEl = document.createElement('span');
+      labelEl.className = 'agy-zh-cn-sidebar-label truncate flex-1 text-left';
+      if (textStyle) labelEl.style.cssText = textStyle;
+
+      const rightWrap = document.createElement('span');
+      rightWrap.className = 'shrink-0 flex items-center gap-1 opacity-60 ml-auto';
+
+      const dotEl = document.createElement('span');
+      dotEl.className = 'agy-zh-cn-update-dot';
+      dotEl.setAttribute('aria-hidden', 'true');
+      dotEl.style.cssText = 'display:none;width:6px;height:6px;border-radius:9999px;background:#3b82f6;';
+
+      const gearBtn = document.createElement('span');
+      gearBtn.className = 'agy-zh-cn-gear-btn flex items-center justify-center rounded';
+      gearBtn.title = '汉化设置与更新';
+      gearBtn.style.cssText = 'width:16px;height:16px;cursor:pointer;';
+      gearBtn.innerHTML =
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>' +
+        '</svg>';
+      gearBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (contextMenuEl) {
+          hideContextMenu();
+        } else {
+          showContextMenu();
+        }
+      });
+
+      rightWrap.appendChild(dotEl);
+      rightWrap.appendChild(gearBtn);
+      btn.appendChild(iconWrap);
+      btn.appendChild(labelEl);
+      btn.appendChild(rightWrap);
+    }
+
     updateToggleBadge();
   }
 
@@ -8154,10 +8227,25 @@
     }
   }
 
+    let sidebarEnsureTimer = null;
+    function scheduleEnsureSidebarButton() {
+      if (sidebarEnsureTimer) return;
+      sidebarEnsureTimer = setTimeout(() => {
+        sidebarEnsureTimer = null;
+        const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
+        const myBtn = document.getElementById('agy-zh-cn-sidebar-btn');
+        if (settingsBtn && (!myBtn || settingsBtn.nextElementSibling !== myBtn || myBtn.className !== settingsBtn.className)) {
+          mountToggleBadge();
+        }
+      }, 300);
+    }
+
     const observer = new MutationObserver((mutations) => {
+      let hasChildChange = false;
       for (let i = 0; i < mutations.length; i++) {
         const m = mutations[i];
         if (m.type === 'childList') {
+          hasChildChange = true;
           if (m.removedNodes && m.removedNodes.length > 0) {
             for (let r = 0; r < m.removedNodes.length; r++) {
               cleanupRemovedNode(m.removedNodes[r]);
@@ -8175,6 +8263,9 @@
             processAttributes(m.target);
           }
         }
+      }
+      if (hasChildChange) {
+        scheduleEnsureSidebarButton();
       }
     });
 
