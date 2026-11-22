@@ -8301,17 +8301,13 @@
     if (labelEl) {
       labelEl.textContent = currentLang === 'zh-CN' ? '简体中文' : 'English';
     }
-    const badgeEl = btn.querySelector('.agy-zh-cn-lang-badge');
-    if (badgeEl) {
-      badgeEl.textContent = currentLang === 'zh-CN' ? '中' : 'EN';
-    }
     const dotEl = btn.querySelector('.agy-zh-cn-update-dot');
     if (dotEl) {
       dotEl.style.display = updateState.status === 'available' ? 'inline-block' : 'none';
     }
-    btn.title = currentLang === 'zh-CN'
-      ? '界面语言：简体中文（点击打开设置面板）'
-      : 'UI Language: English (Click to open settings)';
+    if (btn.hasAttribute('title')) {
+      btn.removeAttribute('title');
+    }
   }
 
   function getSidebarAnchorTarget(settingsBtn) {
