@@ -365,14 +365,12 @@ class ZhCnSidecarBridge {
       const port = readDevToolsPort();
       if (!port) {
         this.isConnecting = false;
-        this.scheduleReconnect(2000);
         return;
       }
 
       const target = await fetchMainTarget(port);
       if (!target || !target.webSocketDebuggerUrl) {
         this.isConnecting = false;
-        this.scheduleReconnect(2000);
         return;
       }
 
@@ -476,12 +474,30 @@ class ZhCnSidecarBridge {
   start() {
     ensureAsarBootHook();
     this.connect();
-    setInterval(() => {
-      ensureAsarBootHook();
-      if (!this.isConnecting && (!this.ws || this.ws.readyState !== WebSocket.OPEN)) {
-        this.connect();
+    this.watchPortFile();
+  }
+
+  watchPortFile() {
+    if (this.portWatcher) return;
+    try {
+      const portFile = getDevToolsPortFile();
+      const portDir = path.dirname(portFile);
+      const portBase = path.basename(portFile);
+      if (!fs.existsSync(portDir)) return;
+      let debounceTimer = null;
+      this.portWatcher = fs.watch(portDir, (_eventType, filename) => {
+        if (filename && String(filename) !== portBase) return;
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          if (!this.isConnecting && (!this.ws || this.ws.readyState !== WebSocket.OPEN)) {
+            this.connect();
+          }
+        }, 300);
+      });
+      if (this.portWatcher && typeof this.portWatcher.unref === 'function') {
+        this.portWatcher.unref();
       }
-    }, 5000);
+    } catch (_) {}
   }
 
   async disposeLive() {
@@ -506,6 +522,10 @@ class ZhCnSidecarBridge {
 
   stop() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.portWatcher) {
+      try { this.portWatcher.close(); } catch (_) {}
+      this.portWatcher = null;
+    }
     this.closeSocket();
   }
 }
