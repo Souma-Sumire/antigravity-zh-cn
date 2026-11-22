@@ -84,7 +84,7 @@ function readDevToolsPort() {
 
 function fetchMainTarget(port) {
   return new Promise((resolve) => {
-    const req = http.get(`http://127.0.0.1:${port}/json/list`, (res) => {
+    const req = http.get({ host: '127.0.0.1', port, path: '/json/list', agent: false }, (res) => {
       let raw = '';
       res.on('data', (chunk) => (raw += chunk));
       res.on('end', () => {
@@ -393,9 +393,12 @@ class ZhCnSidecarBridge {
           await this.send('Page.enable');
           const code = buildInjectionScript();
           if (code) {
-            await this.send('Page.addScriptToEvaluateOnNewDocument', {
+            const added = await this.send('Page.addScriptToEvaluateOnNewDocument', {
               source: `try{if(!window.__AGY_I18N__){${code}}}catch(_){}`
-            }).catch(() => {});
+            }).catch(() => null);
+            if (added && added.identifier) {
+              this.newDocScriptId = added.identifier;
+            }
           }
           await this.injectIfNeeded(false);
         } catch (_) {}
@@ -481,6 +484,26 @@ class ZhCnSidecarBridge {
     }, 5000);
   }
 
+  async disposeLive() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    try {
+      if (this.newDocScriptId) {
+        await Promise.race([
+          this.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: this.newDocScriptId }),
+          new Promise((r) => setTimeout(r, 300))
+        ]).catch(() => {});
+        this.newDocScriptId = null;
+      }
+      await Promise.race([
+        this.send('Runtime.evaluate', {
+          expression: 'try{if(window.__AGY_I18N__&&window.__AGY_I18N__.setLanguage){window.__AGY_I18N__.setLanguage("en-US");}}catch(_){}',
+          returnByValue: true
+        }),
+        new Promise((r) => setTimeout(r, 500))
+      ]).catch(() => {});
+    } catch (_) {}
+  }
+
   stop() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.closeSocket();
@@ -490,16 +513,21 @@ class ZhCnSidecarBridge {
 const bridge = new ZhCnSidecarBridge();
 bridge.start();
 
-process.on('SIGINT', () => {
+async function gracefulExit(disposeUi) {
+  if (disposeUi) {
+    await bridge.disposeLive();
+  }
   cleanupPidFile();
   bridge.stop();
   process.exit(0);
+}
+
+process.on('SIGINT', () => {
+  gracefulExit(false);
 });
 
 process.on('SIGTERM', () => {
-  cleanupPidFile();
-  bridge.stop();
-  process.exit(0);
+  gracefulExit(true);
 });
 
 process.on('exit', () => {

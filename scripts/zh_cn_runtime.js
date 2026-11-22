@@ -6217,30 +6217,6 @@
       '$1 年前'
     ],
     [
-      /^(\d+)\s*mo$/,
-      '$1 个月前'
-    ],
-    [
-      /^(\d+)\s*w$/,
-      '$1 周前'
-    ],
-    [
-      /^(\d+)\s*d$/,
-      '$1 天前'
-    ],
-    [
-      /^(\d+)\s*h$/,
-      '$1 小时前'
-    ],
-    [
-      /^(\d+)\s*m$/,
-      '$1 分钟前'
-    ],
-    [
-      /^(\d+)\s*y$/,
-      '$1 年前'
-    ],
-    [
       /^(\d+)\s*d\s+(\d+)\s*h\s+(\d+)\s*m$/i,
       '$1 天 $2 小时 $3 分钟'
     ],
@@ -6364,7 +6340,6 @@
     [/^(.+?)\s+Monthly Limit$/i, '$1 本月额度'],
     [/^Send feedback as\s+(.+)$/i, '以 $1 身份发送反馈'],
     [/^Authenticated as\s+(.+)$/i, '已登录为 $1'],
-    [/^Exited with code\s+(\d+)$/i, (_m, code) => `退出代码 ${code}`],
     [/^Created At:\s*(.+)$/i, '创建时间：$1'],
     [/^Completed At:\s*(.+)$/i, '完成时间：$1'],
     [/^Showing lines (\d+)-(\d+) of (\d+)$/i, '显示第 $1-$2 行（共 $3 行）'],
@@ -6372,11 +6347,10 @@
  [/^(\d+) agents? running$/i, '$1 个 Agent 运行中'],
  [/^No agents running$/i, '无运行中的 Agent'],
     [/^(\d+)\s*tasks?\s*running$/i, '$1 个任务运行中'],
-    [/^Show\s+(\d+)\s+more\s+subagents?$/i, '展开另外 $1 个子代理'],
+    [/^Show\s+(\d+)\s+more\s+subagents?$/i, '展开另外 $1 个子 Agent'],
     [/^Last (\d+) days$/i, '最近 $1 天'],
     [/^Conversation (\d+)$/i, '对话 $1'],
     [/^Workspace_(\d+)$/i, '工作区_$1'],
-    [/^Handler #(\d+)$/i, '处理器 #$1'],
     [/^Add New Handler to\s+(.+)$/i, '为 $1 添加新处理器'],
     [/^No handlers configured for\s+(.+)$/i, '$1 尚未配置处理器'],
     [/^Child Subagents \((\d+)\)$/i, '子 Agent ($1)'],
@@ -6562,11 +6536,21 @@
 
   let customDict = getCustomDict();
   let recursionDepth = 0;
+  const TRANSLATE_CACHE_LIMIT = 4000;
+  const translateCache = new Map();
+
+  function setTranslateCache(key, value) {
+    if (translateCache.size >= TRANSLATE_CACHE_LIMIT) {
+      translateCache.clear();
+    }
+    translateCache.set(key, value);
+  }
 
   function doTranslateText(str) {
     if (!str || typeof str !== 'string') return null;
     const trimmed = str.trim();
     if (!trimmed) return null;
+    if (!/[A-Za-z]/.test(trimmed)) return null;
     if (trimmed.toLowerCase() === 'antigravity') return str;
 
     if (customDict[trimmed]) {
@@ -6599,6 +6583,11 @@
           }
         } catch (_) {}
       }
+    }
+
+    if (translateCache.has(trimmed)) {
+      const cached = translateCache.get(trimmed);
+      return cached === null ? null : str.replace(trimmed, () => cached);
     }
 
     const notApplyMatch = normalizedKey.match(
@@ -6782,16 +6771,13 @@
     for (let i = 0; i < REGEX_RULES.length; i++) {
       const [re, replacement] = REGEX_RULES[i];
       if (re.test(normalizedKey)) {
-        let res;
-        if (typeof replacement === 'function') {
-          res = normalizedKey.replace(re, replacement);
-        } else {
-          res = normalizedKey.replace(re, replacement);
-        }
-        return str.replace(trimmed, res);
+        const res = normalizedKey.replace(re, replacement);
+        setTranslateCache(trimmed, res);
+        return str.replace(trimmed, () => res);
       }
     }
 
+    setTranslateCache(trimmed, null);
     return null;
   }
 
@@ -6862,6 +6848,10 @@
     '[data-testid="comment-card-text"]',
     '[data-testid="entity-pill"]',
     '[data-testid="file-title-name"]',
+    '[data-testid="subagent-tab-header-title"]',
+    '[data-testid="hover-card-title"]',
+    '[data-testid="webview-download-filename"]',
+    '[data-testid="breadcrumb-segment"]',
     '[data-testid="project-header"]',
     '[data-testid*="project-header"]',
     '[data-testid="sidebar-project-header"]',
@@ -7249,6 +7239,7 @@
       const attr = ATTR_LIST[i];
       const val = el.getAttribute(attr);
       if (!val) continue;
+      if (attr === 'aria-label' && val === 'Cancel') continue;
 
       let elRecord = state.attrMap.get(el);
       if (!elRecord) {
@@ -7364,8 +7355,10 @@
       curr = walker.nextNode();
     }
     translateCommentUiRoots(root);
-    translateFileTreeSidebarHeaders();
-    sanitizeBrandAndWorkspaceHeaders();
+    if (root === document.body || root === document.documentElement) {
+      translateFileTreeSidebarHeaders();
+      sanitizeBrandAndWorkspaceHeaders();
+    }
   }
 
   function translateFileTreeSidebarHeaders() {
@@ -7412,9 +7405,7 @@
     const REVERT_MAP = {
       '反重力-Zh-CN': 'antigravity-zh-cn',
       '反重力-zh-cn': 'antigravity-zh-cn',
-      '反重力': 'antigravity',
-      '罗斯福': 'Roosevelt',
-      '测试': 'test'
+      '反重力': 'antigravity'
     };
     try {
       const headers = document.querySelectorAll(
@@ -7485,27 +7476,67 @@
   let pendingNodes = new Set();
   let rafScheduled = false;
 
+  function pruneAncestorNodes(nodes) {
+    if (nodes.length <= 1) return nodes;
+    const nodeSet = new Set(nodes);
+    const pruned = [];
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      if (!n || !n.isConnected) continue;
+      let cur = n.parentNode;
+      let covered = false;
+      while (cur) {
+        if (nodeSet.has(cur)) {
+          covered = true;
+          break;
+        }
+        cur = cur.parentNode;
+      }
+      if (!covered) pruned.push(n);
+    }
+    return pruned;
+  }
+
   function flushPending() {
     rafScheduled = false;
     if (currentLang !== 'zh-CN') {
       pendingNodes.clear();
       return;
     }
-    const batch = Array.from(pendingNodes);
+    const batch = pruneAncestorNodes(Array.from(pendingNodes));
     pendingNodes.clear();
-    for (let i = 0; i < batch.length; i++) {
-      walkAndTranslate(batch[i]);
+    const startTs = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    let idx = 0;
+    while (idx < batch.length) {
+      walkAndTranslate(batch[idx]);
+      idx++;
+      if (idx < batch.length) {
+        const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        if (now - startTs >= 6 || idx >= 200) {
+          for (let rest = idx; rest < batch.length; rest++) {
+            pendingNodes.add(batch[rest]);
+          }
+          scheduleRafFlush();
+          break;
+        }
+      }
+    }
+    translateFileTreeSidebarHeaders();
+    sanitizeBrandAndWorkspaceHeaders();
+  }
+
+  function scheduleRafFlush() {
+    if (!rafScheduled) {
+      rafScheduled = true;
+      window.requestAnimationFrame(flushPending);
+      setTimeout(() => { if (rafScheduled) flushPending(); }, 32);
     }
   }
 
   function scheduleWalk(node) {
     if (!node) return;
     pendingNodes.add(node);
-    if (!rafScheduled) {
-      rafScheduled = true;
-      window.requestAnimationFrame(flushPending);
-      setTimeout(() => { if (rafScheduled) flushPending(); }, 32);
-    }
+    scheduleRafFlush();
   }
 
     const TITLE_TRANS_STORAGE_KEY = '__agy_enable_remote_title_trans__';
@@ -7517,7 +7548,7 @@
     if (localStore) {
       try { parsed = JSON.parse(localStore); } catch (_) {}
     }
-    const badKeys = ['antigravity-zh-cn', 'Antigravity', 'antigravity', 'test', 'FDR', 'Roosevelt', 'FDR-2.0'];
+    const badKeys = ['antigravity-zh-cn', 'Antigravity', 'antigravity'];
     for (const bk of badKeys) {
       delete parsed[bk];
       if (window.__AGY_TITLE_CACHE__) delete window.__AGY_TITLE_CACHE__[bk];
@@ -7558,6 +7589,7 @@
     console.log('__AGY_CONFIG_SYNC__:' + JSON.stringify({ enableRemoteTitleTranslation: Boolean(enabled) }));
 
     if (currentLang === 'zh-CN') {
+      translateCache.clear();
       restoreAllToEnglish();
       state.nodeMap = new WeakMap();
       state.translatedNodes.clear();
@@ -7609,9 +7641,9 @@
             const nextVal = origVal.replace(s, trans);
             if (nextVal !== origVal) {
               if (!state.nodeMap.has(node)) {
-                state.nodeMap.set(node, { orig: origVal, trans: nextVal });
+                state.nodeMap.set(node, { orig: origVal, translated: nextVal });
               } else {
-                state.nodeMap.get(node).trans = nextVal;
+                state.nodeMap.get(node).translated = nextVal;
               }
               state.translatedNodes.add(node);
               node.nodeValue = nextVal;
@@ -8080,6 +8112,7 @@
         window.localStorage.setItem('antigravity.ui.customDict', JSON.stringify(merged));
       } catch (_) {}
       customDict = merged;
+      translateCache.clear();
       if (currentLang === 'zh-CN') {
         walkAndTranslate(document.body);
       }
@@ -8122,17 +8155,25 @@
   }
 
     const observer = new MutationObserver((mutations) => {
-      if (currentLang !== 'zh-CN') return;
       for (let i = 0; i < mutations.length; i++) {
         const m = mutations[i];
         if (m.type === 'childList') {
-          for (let j = 0; j < m.addedNodes.length; j++) {
-            scheduleWalk(m.addedNodes[j]);
+          if (m.removedNodes && m.removedNodes.length > 0) {
+            for (let r = 0; r < m.removedNodes.length; r++) {
+              cleanupRemovedNode(m.removedNodes[r]);
+            }
           }
-        } else if (m.type === 'characterData') {
-          scheduleWalk(m.target);
-        } else if (m.type === 'attributes') {
-          processAttributes(m.target);
+          if (currentLang === 'zh-CN') {
+            for (let j = 0; j < m.addedNodes.length; j++) {
+              scheduleWalk(m.addedNodes[j]);
+            }
+          }
+        } else if (currentLang === 'zh-CN') {
+          if (m.type === 'characterData') {
+            scheduleWalk(m.target);
+          } else if (m.type === 'attributes') {
+            processAttributes(m.target);
+          }
         }
       }
     });
@@ -8276,6 +8317,7 @@
           document.body.appendChild(iframe);
           nativeNotif = iframe.contentWindow.Notification;
           window.__AGY_REAL_NATIVE_NOTIF__ = nativeNotif;
+          iframe.remove();
         }
       } catch (_) {}
       if (!nativeNotif) {

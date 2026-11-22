@@ -169,9 +169,11 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error('Installation error:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('Installation error:', err);
+    process.exit(1);
+  });
+}
 
-module.exports = { copyDirRecursive, setPluginStateViaLsRpc, enablePluginViaLsRpc };
+module.exports = { copyDirRecursive, setPluginStateViaLsRpc, enablePluginViaLsRpc, main };

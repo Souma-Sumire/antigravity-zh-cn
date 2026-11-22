@@ -428,7 +428,6 @@ function requestMyMemory(text, proxyConfig) {
 const PROTECTED_TERMS = [
   [/GitHub\s*Actions?/gi, 'GitHub Actions'],
   [/Readme/gi, 'README'],
-  [/FFXIV/gi, 'FFXIV'],
   [/UI\/UX/gi, 'UI/UX'],
   [/Antigravity/gi, 'Antigravity']
 ];

@@ -3,12 +3,22 @@ const path = require('path');
 const os = require('os');
 const http = require('http');
 
+function resolveDevToolsPortFile() {
+  if (process.env.AGY_DEVTOOLS_PORT_FILE) {
+    return process.env.AGY_DEVTOOLS_PORT_FILE;
+  }
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+    return path.join(appData, 'Antigravity', 'DevToolsActivePort');
+  }
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'Antigravity', 'DevToolsActivePort');
+  }
+  return path.join(os.homedir(), '.config', 'Antigravity', 'DevToolsActivePort');
+}
+
 const runtimeScriptPath = path.join(__dirname, 'zh_cn_runtime.js');
-const devToolsPortFile = path.join(
-  process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-  'Antigravity',
-  'DevToolsActivePort'
-);
+const devToolsPortFile = resolveDevToolsPortFile();
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -16,7 +26,7 @@ function sleep(ms) {
 
 function httpGetJson(port, urlPath) {
   return new Promise((resolve, reject) => {
-    const req = http.get({ host: '127.0.0.1', port, path: urlPath, timeout: 2500 }, (res) => {
+    const req = http.get({ host: '127.0.0.1', port, path: urlPath, timeout: 2500, agent: false }, (res) => {
       let body = '';
       res.on('data', (chunk) => (body += chunk));
       res.on('end', () => {
@@ -85,7 +95,9 @@ function evalInTarget(wsUrl, expression) {
 
 async function injectOnce(action = 'apply') {
   if (!fs.existsSync(devToolsPortFile)) {
-    throw new Error('DevToolsActivePort not found');
+    throw new Error(
+      'DevToolsActivePort not found（Antigravity 2.33.0+ 默认关闭 CDP 调试端口；主进程 Boot Hook 已安装时重启应用即可原生生效，如需热重载请使用 --remote-debugging-port=0 启动）'
+    );
   }
 
   const lines = fs.readFileSync(devToolsPortFile, 'utf8').trim().split(/\r?\n/);

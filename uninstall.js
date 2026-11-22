@@ -102,9 +102,23 @@ async function main() {
       }
     } catch (_) {}
   }
-  const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
-  const asarPendingPath = path.join(localAppData, 'Programs', 'antigravity', 'resources', 'app.asar.pending');
-  filesToClean.push(asarPendingPath);
+  let resolvedResourcesDir = null;
+  if (fs.existsSync(bootHookScript)) {
+    try {
+      const bootHook = require(bootHookScript);
+      if (bootHook && bootHook.resourcesDir) {
+        resolvedResourcesDir = bootHook.resourcesDir;
+      }
+    } catch (_) {}
+  }
+  if (!resolvedResourcesDir) {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    resolvedResourcesDir = path.join(localAppData, 'Programs', 'antigravity', 'resources');
+  }
+  filesToClean.push(
+    path.join(resolvedResourcesDir, 'app.asar.pending'),
+    path.join(resolvedResourcesDir, 'app.asar.bak.meta.json')
+  );
 
   for (const f of filesToClean) {
     if (fs.existsSync(f)) {

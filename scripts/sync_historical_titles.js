@@ -478,7 +478,7 @@ async function syncHistoricalTitles() {
     const s = title.trim();
     if (!s || s.length < 3) return false;
     if (isCorruptedText(s) || /[\u4e00-\u9fa5]/.test(s)) return false;
-    return /[a-zA-Z]{3,}/.test(s) && !/^(?:UI|UX|FFXIV|Git|PR)$/.test(s);
+    return /[a-zA-Z]{3,}/.test(s) && !/^(?:UI|UX|Git|PR|API|SDK|CLI|IDE|MCP)$/.test(s);
   }
 
   // 1. 只读扫描 SQLite 本地会话摘要数据库（主表与全文检索表）

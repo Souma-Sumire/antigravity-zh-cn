@@ -554,22 +554,25 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
 
   try {
     if (electron.dialog) {
-      if (typeof electron.dialog.showMessageBox === 'function') {
-        const origShowMessageBox = electron.dialog.showMessageBox.bind(electron.dialog);
-        electron.dialog.showMessageBox = function (winOrOpts, maybeOpts) {
-          if (maybeOpts && typeof maybeOpts === 'object') {
-            return origShowMessageBox(winOrOpts, translateDialogOptions(maybeOpts));
-          }
-          return origShowMessageBox(translateDialogOptions(winOrOpts));
-        };
+      for (const method of ['showMessageBox', 'showMessageBoxSync', 'showOpenDialog', 'showOpenDialogSync', 'showSaveDialog', 'showSaveDialogSync']) {
+        if (typeof electron.dialog[method] === 'function') {
+          const origFn = electron.dialog[method].bind(electron.dialog);
+          electron.dialog[method] = function (winOrOpts, maybeOpts) {
+            if (maybeOpts && typeof maybeOpts === 'object') {
+              return origFn(winOrOpts, translateDialogOptions(maybeOpts));
+            }
+            return origFn(translateDialogOptions(winOrOpts));
+          };
+        }
       }
-      if (typeof electron.dialog.showOpenDialog === 'function') {
-        const origShowOpenDialog = electron.dialog.showOpenDialog.bind(electron.dialog);
-        electron.dialog.showOpenDialog = function (winOrOpts, maybeOpts) {
-          if (maybeOpts && typeof maybeOpts === 'object') {
-            return origShowOpenDialog(winOrOpts, translateDialogOptions(maybeOpts));
-          }
-          return origShowOpenDialog(translateDialogOptions(winOrOpts));
+      if (typeof electron.dialog.showErrorBox === 'function') {
+        const origShowErrorBox = electron.dialog.showErrorBox.bind(electron.dialog);
+        electron.dialog.showErrorBox = function (title, content) {
+          const nextTitle =
+            getLanguageConfig() === 'zh-CN' && typeof title === 'string' && DIALOG_TEXT_MAP[title]
+              ? DIALOG_TEXT_MAP[title]
+              : title;
+          return origShowErrorBox(nextTitle, content);
         };
       }
     }
@@ -782,7 +785,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   }
 
   function scheduleOneShotPostUpdatePatchIfPending() {
-    if (postUpdateScheduled) return;
+    if (postUpdateScheduled || process.platform !== 'win32') return;
     try {
       const pendingDir = path.join(
         process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
@@ -910,6 +913,10 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         if (!isAllowedPageUrl(frameUrl) || !/^(?:https?|plugin):/i.test(frameUrl)) return;
         const code = getRuntimeScript();
         if (!code) return;
+        if (frameUrl.toLowerCase().startsWith('plugin://')) {
+          Promise.resolve(frame.executeJavaScript(getTitleCacheInjection() + code)).catch(() => {});
+          return;
+        }
         const checkExpr = '(function(u){try{var t=new URL(u),els=document.querySelectorAll(\'iframe[data-testid="sidecar-iframe"]\');for(var i=0;i<els.length;i++){var raw=els[i].getAttribute(\'src\')||els[i].src||\'\';if(!raw)continue;var s=new URL(raw,location.href);if(s.protocol===t.protocol&&s.host===t.host)return true;}}catch(_){}return false;})(' + JSON.stringify(frameUrl) + ')';
         Promise.resolve(mainFrame.executeJavaScript(checkExpr))
           .then((isSidecar) => {

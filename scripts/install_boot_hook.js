@@ -2,19 +2,44 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { execFileSync } = require('child_process');
 
-const defaultResourcesDir = path.join(
-  process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
-  'Programs',
-  'antigravity',
-  'resources'
-);
+function resolveDefaultResourcesDir() {
+  if (process.platform === 'win32') {
+    return path.join(
+      process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
+      'Programs',
+      'antigravity',
+      'resources'
+    );
+  }
+  if (process.platform === 'darwin') {
+    const candidates = [
+      '/Applications/Antigravity.app/Contents/Resources',
+      path.join(os.homedir(), 'Applications', 'Antigravity.app', 'Contents', 'Resources')
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(path.join(c, 'app.asar'))) return c;
+    }
+    return candidates[0];
+  }
+  const linuxCandidates = [
+    '/usr/share/antigravity/resources',
+    '/opt/antigravity/resources',
+    '/usr/lib/antigravity/resources',
+    path.join(os.homedir(), '.local', 'share', 'antigravity', 'resources')
+  ];
+  for (const c of linuxCandidates) {
+    if (fs.existsSync(path.join(c, 'app.asar'))) return c;
+  }
+  return linuxCandidates[0];
+}
 
-const resourcesDir = process.env.AGY_RESOURCES_DIR || defaultResourcesDir;
+const resourcesDir = process.env.AGY_RESOURCES_DIR || resolveDefaultResourcesDir();
 const appDir = path.join(resourcesDir, 'app');
 const asarPath = path.join(resourcesDir, 'app.asar');
 const asarBakPath = path.join(resourcesDir, 'app.asar.bak');
+const asarBakMetaPath = path.join(resourcesDir, 'app.asar.bak.meta.json');
 const asarPendingPath = path.join(resourcesDir, 'app.asar.pending');
 const HOOK_MARKER = '/*__AGY_ZH_CN_BOOT_HOOK__*/';
 
@@ -61,6 +86,57 @@ function parseAsar(buf) {
   const headerJson = buf.toString('utf8', 16, 16 + u3);
   const header = JSON.parse(headerJson);
   return { dataOffset, u3, header };
+}
+
+function readAsarPackageVersion(buf, dataOffset, header) {
+  try {
+    const pkgEntry = header?.files?.['package.json'];
+    if (!pkgEntry || pkgEntry.offset === undefined || pkgEntry.size === undefined) return '';
+    const start = dataOffset + Number(pkgEntry.offset);
+    const pkgJson = buf.toString('utf8', start, start + Number(pkgEntry.size));
+    const pkg = JSON.parse(pkgJson);
+    return typeof pkg.version === 'string' ? pkg.version : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function computeSha256(buf) {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+function syncMacOsIntegrityAndSign(headerJsonStr) {
+  if (process.platform !== 'darwin') return;
+  try {
+    const contentsDir = path.dirname(resourcesDir);
+    const appBundleDir = path.dirname(contentsDir);
+    const infoPlistPath = path.join(contentsDir, 'Info.plist');
+    if (fs.existsSync(infoPlistPath) && headerJsonStr) {
+      const headerHash = crypto.createHash('sha256').update(Buffer.from(headerJsonStr, 'utf8')).digest('hex');
+      try {
+        // 仅当 Info.plist 已包含 ElectronAsarIntegrity 时更新对应 hash
+        const plistRaw = execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', infoPlistPath], {
+          encoding: 'utf8'
+        });
+        const plistObj = JSON.parse(plistRaw);
+        if (plistObj && plistObj.ElectronAsarIntegrity && plistObj.ElectronAsarIntegrity['Resources/app.asar']) {
+          plistObj.ElectronAsarIntegrity['Resources/app.asar'].hash = headerHash;
+          execFileSync(
+            '/usr/bin/plutil',
+            ['-replace', 'ElectronAsarIntegrity.Resources/app\\.asar.hash', '-string', headerHash, infoPlistPath],
+            { stdio: 'ignore' }
+          );
+        }
+      } catch (_) {}
+    }
+    if (appBundleDir.endsWith('.app') && fs.existsSync(appBundleDir)) {
+      try {
+        execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', appBundleDir], { stdio: 'ignore' });
+      } catch (err) {
+        console.warn('   macOS codesign warning (may require sudo):', err.message);
+      }
+    }
+  } catch (_) {}
 }
 
 function isAsarPatched(targetAsarPath = asarPath) {
@@ -184,20 +260,36 @@ function uninstall() {
   const isPatched = isAsarPatched(asarPath);
   if (!isPatched) {
     console.log('app.asar is currently not patched.');
-    if (fs.existsSync(asarBakPath)) {
-      try { fs.unlinkSync(asarBakPath); } catch (_) {}
+    for (const f of [asarBakPath, asarBakMetaPath]) {
+      if (fs.existsSync(f)) {
+        try { fs.unlinkSync(f); } catch (_) {}
+      }
     }
     return;
   }
 
   let restored = false;
+  let restoredHeaderJson = '';
   if (fs.existsSync(asarBakPath)) {
     try {
       const bakBuf = fs.readFileSync(asarBakPath);
       if (!isAsarPatched(asarBakPath)) {
-        writeAsarSafely(asarPath, bakBuf);
-        console.log('Restored original app.asar from verified backup:', asarBakPath);
-        restored = true;
+        const curBuf = fs.readFileSync(asarPath);
+        const curParsed = parseAsar(curBuf);
+        const bakParsed = parseAsar(bakBuf);
+        const curVer = readAsarPackageVersion(curBuf, curParsed.dataOffset, curParsed.header);
+        const bakVer = readAsarPackageVersion(bakBuf, bakParsed.dataOffset, bakParsed.header);
+        const versionSafe = !curVer || !bakVer || curVer === bakVer;
+        if (versionSafe) {
+          writeAsarSafely(asarPath, bakBuf);
+          restoredHeaderJson = JSON.stringify(bakParsed.header);
+          console.log('Restored original app.asar from verified backup:', asarBakPath);
+          restored = true;
+        } else {
+          console.warn(
+            `Skip stale backup (${bakVer} != current ${curVer}) to prevent client downgrade; using dynamic unhook instead.`
+          );
+        }
       }
     } catch (_) {}
   }
@@ -227,6 +319,7 @@ function uninstall() {
       const restoredBuf = Buffer.concat([newHeaderBuf, payloadBuf, cleanMainBuf]);
 
       writeAsarSafely(asarPath, restoredBuf);
+      restoredHeaderJson = newHeaderJson;
       console.log('Dynamically unhooked and restored clean app.asar.');
       restored = true;
     } catch (err) {
@@ -234,8 +327,14 @@ function uninstall() {
     }
   }
 
-  if (fs.existsSync(asarBakPath)) {
-    try { fs.unlinkSync(asarBakPath); } catch (_) {}
+  if (restored && restoredHeaderJson) {
+    syncMacOsIntegrityAndSign(restoredHeaderJson);
+  }
+
+  for (const f of [asarBakPath, asarBakMetaPath]) {
+    if (fs.existsSync(f)) {
+      try { fs.unlinkSync(f); } catch (_) {}
+    }
   }
 }
 
@@ -281,6 +380,20 @@ function install(force = false) {
   if (!alreadyHooked) {
     try {
       fs.writeFileSync(asarBakPath, currentBuf);
+      const cleanVersion = readAsarPackageVersion(currentBuf, dataOffset, header);
+      fs.writeFileSync(
+        asarBakMetaPath,
+        JSON.stringify(
+          {
+            version: cleanVersion,
+            cleanSha256: computeSha256(currentBuf),
+            backedUpAt: new Date().toISOString()
+          },
+          null,
+          2
+        ),
+        'utf8'
+      );
       console.log('Backed up clean official app.asar to:', asarBakPath);
     } catch (_) {}
     payloadBuf = currentBuf.subarray(dataOffset);
@@ -304,6 +417,7 @@ function install(force = false) {
   const finalAsarBuf = Buffer.concat([newHeaderBuf, payloadBuf, patchedMainBuf]);
 
   const mode = writeAsarSafely(asarPath, finalAsarBuf);
+  syncMacOsIntegrityAndSign(newHeaderJson);
   console.log(
     `Patched app.asar (${mode}, header dataOffset: ${dataOffset} -> ${newHeaderBuf.length}, main.js size: ${patchedMainBuf.length})`
   );
@@ -311,10 +425,17 @@ function install(force = false) {
 }
 
 module.exports = {
+  resourcesDir,
   asarPath,
+  asarBakPath,
+  asarPendingPath,
   isAsarPatched,
   install,
-  uninstall
+  uninstall,
+  parseAsar,
+  readAsarPackageVersion,
+  buildAsarHeaderBuffer,
+  computeIntegrity
 };
 
 if (require.main === module) {
