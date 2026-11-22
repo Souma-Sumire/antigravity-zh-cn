@@ -7760,8 +7760,209 @@
     document.removeEventListener('keydown', handleMenuKeydown, true);
   }
 
+  function ensureZhCnStyles() {
+    if (typeof document === 'undefined' || !document.head) return;
+    const styleId = 'agy-zh-cn-style';
+    if (document.getElementById(styleId)) return;
+    const styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = `
+      #agy-zh-cn-sidebar-btn {
+        position: relative;
+      }
+      #agy-zh-cn-sidebar-btn:hover {
+        background-color: var(--sidebar-muted, color-mix(in srgb, var(--foreground, #888) 6%, transparent));
+      }
+      #agy-zh-cn-context-menu {
+        position: fixed;
+        width: 300px;
+        background: var(--card, var(--background, #ffffff));
+        color: var(--foreground, #0a0a0c);
+        border: 1px solid color-mix(in srgb, var(--foreground, #888) 12%, transparent);
+        border-radius: 12px;
+        box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.22), 0 4px 12px -2px rgba(0, 0, 0, 0.1);
+        z-index: 999999;
+        font-family: inherit;
+        overflow: hidden;
+        animation: agyZhPopoverIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        user-select: none;
+        pointer-events: auto;
+      }
+      @keyframes agyZhPopoverIn {
+        from { opacity: 0; transform: translateY(6px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .agy-zh-header {
+        padding: 10px 14px;
+        border-bottom: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .agy-zh-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--foreground, #0a0a0c);
+      }
+      .agy-zh-ver {
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted-foreground, #71717a);
+      }
+      .agy-zh-list {
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .agy-zh-lang-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: none;
+        background: transparent;
+        color: var(--foreground, #0a0a0c);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.14s ease;
+        text-align: left;
+      }
+      .agy-zh-lang-item:hover {
+        background: color-mix(in srgb, var(--foreground, #888) 6%, transparent);
+      }
+      .agy-zh-lang-item.active {
+        background: color-mix(in srgb, var(--primary, #2f75c3) 10%, transparent);
+      }
+      .agy-zh-lang-sub {
+        font-size: 11px;
+        color: var(--muted-foreground, #71717a);
+        margin-left: 6px;
+        font-weight: 400;
+      }
+      .agy-zh-check {
+        color: var(--primary, #2f75c3);
+        display: inline-flex;
+        align-items: center;
+      }
+      .agy-zh-option-row {
+        padding: 10px 14px;
+        border-top: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .agy-zh-option-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--foreground, #0a0a0c);
+      }
+      .agy-zh-switch {
+        position: relative;
+        width: 34px;
+        height: 18px;
+        padding: 0;
+        border-radius: 9999px;
+        border: 1px solid color-mix(in srgb, var(--foreground, #888) 25%, transparent);
+        background: color-mix(in srgb, var(--foreground, #888) 12%, transparent);
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+      }
+      .agy-zh-switch.on {
+        background: var(--primary, #2f75c3);
+        border-color: var(--primary, #2f75c3);
+      }
+      .agy-zh-switch-knob {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 9999px;
+        background: #ffffff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+        transition: transform 0.15s ease;
+      }
+      .agy-zh-switch.on .agy-zh-switch-knob {
+        transform: translateX(16px);
+      }
+      .agy-zh-footer {
+        padding: 8px;
+        border-top: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .agy-zh-status {
+        font-size: 11px;
+        color: var(--muted-foreground, #71717a);
+        padding: 2px 6px;
+        border-left: 2px solid color-mix(in srgb, var(--foreground, #888) 28%, transparent);
+        margin: 0 2px;
+        word-break: break-word;
+      }
+      .agy-zh-footer-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .agy-zh-footer-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px;
+        border-radius: 8px;
+        background: var(--secondary, color-mix(in srgb, var(--foreground, #888) 6%, transparent));
+        border: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
+        color: var(--foreground, #0a0a0c);
+        font-size: 12px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+      }
+      .agy-zh-footer-btn:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--foreground, #888) 11%, transparent);
+      }
+      .agy-zh-footer-btn:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .agy-zh-primary-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px;
+        border-radius: 8px;
+        border: none;
+        background: var(--primary, #2f75c3);
+        color: var(--primary-foreground, #ffffff);
+        font-size: 12px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+        transition: filter 0.15s ease;
+      }
+      .agy-zh-primary-btn:hover {
+        filter: brightness(1.08);
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+
   function showContextMenu() {
     hideContextMenu();
+    ensureZhCnStyles();
 
     const anchorBtn = document.getElementById('agy-zh-cn-sidebar-btn');
     let posLeft = '12px';
@@ -7769,9 +7970,9 @@
     if (anchorBtn && typeof anchorBtn.getBoundingClientRect === 'function') {
       const rect = anchorBtn.getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) {
-        const clampedLeft = Math.min(Math.max(12, Math.round(rect.left)), Math.max(12, window.innerWidth - 312));
+        const clampedLeft = Math.min(Math.max(8, Math.round(rect.left)), Math.max(8, window.innerWidth - 312));
         posLeft = `${clampedLeft}px`;
-        posBottom = `${Math.max(12, Math.round(window.innerHeight - rect.top + 8))}px`;
+        posBottom = `${Math.max(8, Math.round(window.innerHeight - rect.top + 8))}px`;
       }
     }
 
@@ -7780,112 +7981,82 @@
     menu.setAttribute('translate', 'no');
     menu.setAttribute('data-plugin-id', 'zh-cn-ui');
     menu.setAttribute('data-external-plugin', 'true');
-    menu.style.cssText = [
-      'position:fixed',
-      `bottom:${posBottom}`,
-      `left:${posLeft}`,
-      'width:296px',
-      'z-index:2147483645',
-      'padding:18px 20px',
-      'border-radius:6px',
-      'border:1px solid var(--border,rgba(128,128,128,0.22))',
-      'background:var(--popover,var(--background,#ffffff))',
-      'box-shadow:0 10px 28px rgba(0,0,0,0.16)',
-      'color:var(--popover-foreground,var(--foreground,#111827))',
-      'font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif',
-      'font-size:13px',
-      'line-height:1.45',
-      'user-select:none',
-      'pointer-events:auto'
-    ].join(';');
+    menu.style.bottom = posBottom;
+    menu.style.left = posLeft;
 
-    // 1. 头部：标题 + 等宽版本标识
+    // 1. 头部
     const header = document.createElement('div');
-    header.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px;';
+    header.className = 'agy-zh-header';
 
-    const titleEl = document.createElement('div');
-    titleEl.textContent = '简体中文语言包';
-    titleEl.style.cssText = 'font-size:15px;font-weight:600;letter-spacing:-0.01em;';
+    const titleEl = document.createElement('span');
+    titleEl.className = 'agy-zh-title';
+    titleEl.textContent = '界面语言';
 
     const verEl = document.createElement('span');
+    verEl.className = 'agy-zh-ver';
     verEl.textContent = updateState.currentHash ? `#${updateState.currentHash}` : 'zh-cn-ui';
-    verEl.style.cssText = 'font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted-foreground,#6b7280);';
 
     header.appendChild(titleEl);
     header.appendChild(verEl);
     menu.appendChild(header);
 
-    // 2. 下划线标签页语言切换
-    const tabBar = document.createElement('div');
-    tabBar.style.cssText = 'display:flex;align-items:center;gap:20px;border-bottom:1px solid var(--border,rgba(128,128,128,0.2));';
+    // 2. 语言列表
+    const listEl = document.createElement('div');
+    listEl.className = 'agy-zh-list';
 
-    const createLangTab = (langCode, text) => {
+    const createLangItem = (langCode, mainText, subText) => {
       const isActive = currentLang === langCode;
-      const tab = document.createElement('button');
-      tab.type = 'button';
-      tab.textContent = text;
-      tab.style.cssText = [
-        'background:none',
-        'border:none',
-        `border-bottom:2px solid ${isActive ? 'var(--primary,#2563eb)' : 'transparent'}`,
-        'padding:0 2px 10px 2px',
-        'margin-bottom:-1px',
-        'font-family:inherit',
-        'font-size:13px',
-        `font-weight:${isActive ? '600' : '400'}`,
-        `color:${isActive ? 'var(--foreground,inherit)' : 'var(--muted-foreground,#6b7280)'}`,
-        'cursor:pointer'
-      ].join(';');
-      tab.addEventListener('click', (e) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = `agy-zh-lang-item${isActive ? ' active' : ''}`;
+
+      const left = document.createElement('span');
+      left.textContent = mainText;
+      const sub = document.createElement('span');
+      sub.className = 'agy-zh-lang-sub';
+      sub.textContent = subText;
+      left.appendChild(sub);
+      item.appendChild(left);
+
+      if (isActive) {
+        const check = document.createElement('span');
+        check.className = 'agy-zh-check';
+        check.innerHTML =
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+        item.appendChild(check);
+      }
+
+      item.addEventListener('click', (e) => {
         e.stopPropagation();
         if (currentLang !== langCode) {
           window.__AGY_I18N__.setLanguage(langCode);
           showContextMenu();
         }
       });
-      return tab;
+      return item;
     };
 
-    tabBar.appendChild(createLangTab('zh-CN', '简体中文'));
-    tabBar.appendChild(createLangTab('en-US', 'English'));
-    menu.appendChild(tabBar);
+    listEl.appendChild(createLangItem('zh-CN', '简体中文', 'Simplified Chinese'));
+    listEl.appendChild(createLangItem('en-US', 'English', '原版英文'));
+    menu.appendChild(listEl);
 
     // 3. 联网翻译会话标题开关
-    const titleSection = document.createElement('div');
-    titleSection.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--border,rgba(128,128,128,0.2));';
+    const optionRow = document.createElement('div');
+    optionRow.className = 'agy-zh-option-row';
 
     const titleSwitchLabel = document.createElement('span');
+    titleSwitchLabel.className = 'agy-zh-option-label';
     titleSwitchLabel.textContent = '联网翻译会话标题';
-    titleSwitchLabel.style.cssText = 'font-size:13px;font-weight:500;';
 
     const isTitleOn = isTitleTranslationEnabled();
     const switchBtn = document.createElement('button');
     switchBtn.type = 'button';
+    switchBtn.className = `agy-zh-switch${isTitleOn ? ' on' : ''}`;
     switchBtn.setAttribute('role', 'switch');
     switchBtn.setAttribute('aria-checked', isTitleOn ? 'true' : 'false');
-    switchBtn.style.cssText = [
-      'position:relative',
-      'width:34px',
-      'height:18px',
-      'padding:0',
-      'border-radius:9999px',
-      `border:1px solid ${isTitleOn ? 'var(--primary,#2563eb)' : 'var(--border,rgba(128,128,128,0.35))'}`,
-      `background:${isTitleOn ? 'var(--primary,#2563eb)' : 'transparent'}`,
-      'cursor:pointer',
-      'flex-shrink:0'
-    ].join(';');
 
     const knob = document.createElement('span');
-    knob.style.cssText = [
-      'position:absolute',
-      'top:2px',
-      `left:${isTitleOn ? '17px' : '2px'}`,
-      'width:12px',
-      'height:12px',
-      'border-radius:9999px',
-      `background:${isTitleOn ? '#ffffff' : 'var(--muted-foreground,#6b7280)'}`,
-      'transition:left 0.15s ease'
-    ].join(';');
+    knob.className = 'agy-zh-switch-knob';
     switchBtn.appendChild(knob);
 
     switchBtn.addEventListener('click', (e) => {
@@ -7894,94 +8065,65 @@
       showContextMenu();
     });
 
-    titleSection.appendChild(titleSwitchLabel);
-    titleSection.appendChild(switchBtn);
-    menu.appendChild(titleSection);
+    optionRow.appendChild(titleSwitchLabel);
+    optionRow.appendChild(switchBtn);
+    menu.appendChild(optionRow);
 
-    // 4. 更新检查与操作区
-    const updateSection = document.createElement('div');
-    updateSection.style.cssText = 'padding-top:14px;';
+    // 4. 底部更新区
+    const footer = document.createElement('div');
+    footer.className = 'agy-zh-footer';
 
     const isBusy = updateState.status === 'checking' || updateState.status === 'updating';
-    const statusTextMap = {
-      idle: '词库与补丁状态正常',
-      checking: '正在检查远程更新...',
-      latest: '当前已是最新版本',
-      available: updateState.latestHash ? `发现可用更新 #${updateState.latestHash}` : '发现可用更新',
-      updating: '正在拉取并应用更新...',
-      updated: updateState.restartRequired ? '更新完成，请重启 Antigravity 生效' : '界面翻译已热更新生效',
-      error: updateState.error || '检查更新失败，请重试'
-    };
+    if (updateState.status !== 'idle') {
+      const statusTextMap = {
+        checking: '正在检查远程更新...',
+        latest: '当前已是最新版本',
+        available: updateState.latestHash ? `发现可用更新 #${updateState.latestHash}` : '发现可用更新',
+        updating: '正在拉取并应用更新...',
+        updated: updateState.restartRequired ? '更新完成，请重启 Antigravity 生效' : '界面翻译已热更新生效',
+        error: updateState.error || '检查更新失败，请重试'
+      };
+      const statusEl = document.createElement('div');
+      statusEl.className = 'agy-zh-status';
+      if (updateState.status === 'available') {
+        statusEl.style.borderLeftColor = 'var(--primary, #2f75c3)';
+      } else if (updateState.status === 'updated') {
+        statusEl.style.borderLeftColor = '#16a34a';
+      } else if (updateState.status === 'error') {
+        statusEl.style.borderLeftColor = '#dc2626';
+      }
+      statusEl.textContent = statusTextMap[updateState.status] || '';
+      footer.appendChild(statusEl);
+    }
 
-    const statusBarColor =
-      updateState.status === 'available' ? 'var(--primary,#2563eb)' :
-      updateState.status === 'updated' ? '#16a34a' :
-      updateState.status === 'error' ? '#dc2626' :
-      'var(--border,rgba(128,128,128,0.4))';
-
-    const statusLine = document.createElement('div');
-    statusLine.textContent = statusTextMap[updateState.status] || statusTextMap.idle;
-    statusLine.style.cssText = [
-      `border-left:2px solid ${statusBarColor}`,
-      'padding-left:10px',
-      'font-size:12px',
-      'color:var(--muted-foreground,#6b7280)',
-      'margin-bottom:12px',
-      'word-break:break-word'
-    ].join(';');
-    updateSection.appendChild(statusLine);
-
-    const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
+    const actions = document.createElement('div');
+    actions.className = 'agy-zh-footer-actions';
 
     const checkBtn = document.createElement('button');
     checkBtn.type = 'button';
+    checkBtn.className = 'agy-zh-footer-btn';
     checkBtn.disabled = isBusy;
     checkBtn.textContent = isBusy ? '处理中...' : '检查更新';
-    checkBtn.style.cssText = [
-      'flex:1',
-      'padding:7px 12px',
-      'border-radius:5px',
-      'border:1px solid var(--border,rgba(128,128,128,0.35))',
-      'background:transparent',
-      'color:var(--foreground,inherit)',
-      'font-family:inherit',
-      'font-size:12px',
-      'font-weight:500',
-      `opacity:${isBusy ? '0.55' : '1'}`,
-      `cursor:${isBusy ? 'default' : 'pointer'}`
-    ].join(';');
     checkBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       sendUpdateAction('check');
     });
-    btnRow.appendChild(checkBtn);
+    actions.appendChild(checkBtn);
 
     if (updateState.status === 'available') {
       const actionBtn = document.createElement('button');
       actionBtn.type = 'button';
+      actionBtn.className = 'agy-zh-primary-btn';
       actionBtn.textContent = '立即更新';
-      actionBtn.style.cssText = [
-        'flex:1',
-        'padding:7px 12px',
-        'border-radius:5px',
-        'border:1px solid var(--primary,#2563eb)',
-        'background:var(--primary,#2563eb)',
-        'color:#ffffff',
-        'font-family:inherit',
-        'font-size:12px',
-        'font-weight:500',
-        'cursor:pointer'
-      ].join(';');
       actionBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         sendUpdateAction('update');
       });
-      btnRow.appendChild(actionBtn);
+      actions.appendChild(actionBtn);
     }
 
-    updateSection.appendChild(btnRow);
-    menu.appendChild(updateSection);
+    footer.appendChild(actions);
+    menu.appendChild(footer);
 
     menu.addEventListener('pointerdown', (e) => e.stopPropagation());
     menu.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -8055,9 +8197,10 @@
     }
   }
 
-  const SIDEBAR_UI_VERSION = '2';
+  const SIDEBAR_UI_VERSION = '3';
 
   function mountToggleBadge() {
+    ensureZhCnStyles();
     try {
       if (window.self !== window.top) return;
     } catch (_) {
