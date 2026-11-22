@@ -7833,7 +7833,7 @@
       }
       #agy-zh-cn-context-menu {
         position: fixed;
-        width: 300px;
+        width: 268px;
         background: var(--card, var(--background, #ffffff));
         color: var(--foreground, #0a0a0c);
         border: 1px solid color-mix(in srgb, var(--foreground, #888) 12%, transparent);
@@ -7925,8 +7925,8 @@
       }
       .agy-zh-switch {
         position: relative;
-        width: 34px;
-        height: 18px;
+        width: 28px;
+        height: 16px;
         padding: 0;
         border-radius: 9999px;
         border: 1px solid color-mix(in srgb, var(--foreground, #888) 25%, transparent);
@@ -7943,15 +7943,15 @@
         position: absolute;
         top: 2px;
         left: 2px;
-        width: 12px;
-        height: 12px;
+        width: 10px;
+        height: 10px;
         border-radius: 9999px;
         background: #ffffff;
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
         transition: transform 0.15s ease;
       }
       .agy-zh-switch.on .agy-zh-switch-knob {
-        transform: translateX(16px);
+        transform: translateX(12px);
       }
       .agy-zh-lang-switch-group {
         display: inline-flex;
@@ -8008,8 +8008,8 @@
         align-items: center;
         justify-content: center;
         gap: 6px;
-        padding: 8px;
-        border-radius: 8px;
+        padding: 6px 8px;
+        border-radius: 7px;
         background: var(--secondary, color-mix(in srgb, var(--foreground, #888) 6%, transparent));
         border: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
         color: var(--foreground, #0a0a0c);
@@ -8031,8 +8031,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 8px;
-        border-radius: 8px;
+        padding: 6px 8px;
+        border-radius: 7px;
         border: none;
         background: var(--primary, #2f75c3);
         color: var(--primary-foreground, #ffffff);
@@ -8291,37 +8291,53 @@
   }
 
   function ensureOutsideHandlers() {
+    const closeMenu = () => {
+      const i18n = window.__AGY_I18N__;
+      if (i18n && i18n.hideContextMenu) i18n.hideContextMenu();
+      else hideContextMenu();
+    };
+
     const handleOutsideInteraction = (e) => {
-      if (!contextMenuEl) return;
+      if (!document.getElementById('agy-zh-cn-context-menu')) return;
       const target = e.target;
       if (target && typeof target.closest === 'function') {
         if (target.closest('#agy-zh-cn-context-menu') || target.closest('#agy-zh-cn-sidebar-btn')) {
           return;
         }
       }
-      hideContextMenu();
+      closeMenu();
     };
 
     if (window.__agyOutsideHandler) {
+      window.removeEventListener('pointerdown', window.__agyOutsideHandler, true);
+      window.removeEventListener('mousedown', window.__agyOutsideHandler, true);
+      window.removeEventListener('click', window.__agyOutsideHandler, true);
       document.removeEventListener('pointerdown', window.__agyOutsideHandler, true);
       document.removeEventListener('mousedown', window.__agyOutsideHandler, true);
       document.removeEventListener('click', window.__agyOutsideHandler, true);
     }
     window.__agyOutsideHandler = handleOutsideInteraction;
-    document.addEventListener('pointerdown', handleOutsideInteraction, true);
-    document.addEventListener('mousedown', handleOutsideInteraction, true);
-    document.addEventListener('click', handleOutsideInteraction, true);
+    window.addEventListener('pointerdown', handleOutsideInteraction, true);
+    window.addEventListener('mousedown', handleOutsideInteraction, true);
+    window.addEventListener('click', handleOutsideInteraction, true);
 
-    if (!window.__agyKeyAttached) {
-      window.__agyKeyAttached = true;
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') hideContextMenu();
-      }, true);
-      window.addEventListener('blur', () => hideContextMenu());
+    if (window.__agyKeyHandler) {
+      window.removeEventListener('keydown', window.__agyKeyHandler, true);
+      document.removeEventListener('keydown', window.__agyKeyHandler, true);
     }
+    window.__agyKeyHandler = (e) => {
+      if (e.key === 'Escape') closeMenu();
+    };
+    window.addEventListener('keydown', window.__agyKeyHandler, true);
+
+    if (window.__agyBlurHandler) {
+      window.removeEventListener('blur', window.__agyBlurHandler);
+    }
+    window.__agyBlurHandler = closeMenu;
+    window.addEventListener('blur', window.__agyBlurHandler);
   }
 
-  const SIDEBAR_UI_VERSION = '6';
+  const SIDEBAR_UI_VERSION = '7';
 
   function mountToggleBadge() {
     ensureZhCnStyles();
@@ -8356,7 +8372,7 @@
       btn.setAttribute('data-external-plugin', 'true');
     }
 
-    // 每次挂载/热重载都覆盖 onclick / oncontextmenu 并委托给最新的 window.__AGY_I18N__，避免旧闭包残留
+    // 仅左键点击开关弹出菜单，右键恢复默认不触发
     btn.onclick = (e) => {
       e.stopPropagation();
       const i18n = window.__AGY_I18N__;
@@ -8368,11 +8384,7 @@
         else showContextMenu();
       }
     };
-    btn.oncontextmenu = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      btn.onclick(e);
-    };
+    btn.oncontextmenu = null;
     ensureOutsideHandlers();
 
     // 插在设置按钮（若存在账号切换器则插在其上方）之前，绝不将原生“设置”顶上去，也不破坏账号切换器与设置的相邻关系
