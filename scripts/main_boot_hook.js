@@ -9,6 +9,21 @@ const { spawn } = require('child_process');
 if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
   global.__AGY_ZH_CN_MAIN_HOOK_LOADED__ = true;
 
+  // 在 Electron ready 之前自动绑定本地 CDP 调试端口，确保任意启动方式均支持热注入
+  try {
+    if (
+      process.env.AGY_DISABLE_AUTO_CDP !== '1' &&
+      electron.app &&
+      electron.app.commandLine &&
+      typeof electron.app.isReady === 'function' &&
+      !electron.app.isReady() &&
+      !electron.app.commandLine.hasSwitch('remote-debugging-port')
+    ) {
+      electron.app.commandLine.appendSwitch('remote-debugging-port', process.env.AGY_CDP_PORT || '9222');
+      electron.app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
+    }
+  } catch (_) {}
+
   const pluginScriptsDir = path.join(os.homedir(), '.gemini', 'config', 'plugins', 'zh-cn-ui', 'scripts');
   const configPath = path.join(os.homedir(), '.gemini', 'antigravity', 'translation_config.json');
   let cachedLanguageConfig = null;

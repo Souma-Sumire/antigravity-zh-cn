@@ -110,6 +110,55 @@ function enablePluginViaLsRpc() {
   return setPluginStateViaLsRpc(true);
 }
 
+function patchWindowsShortcuts(enable = true, port = '9222') {
+  if (process.platform !== 'win32') return 0;
+  try {
+    const psScript = `
+      $enable = ${enable ? '$true' : '$false'}
+      $port = '${String(port).replace(/[^0-9]/g, '') || '9222'}'
+      $shell = New-Object -ComObject WScript.Shell
+      $dirs = @(
+        [Environment]::GetFolderPath('Desktop'),
+        [Environment]::GetFolderPath('CommonDesktopDirectory'),
+        [Environment]::GetFolderPath('Programs'),
+        [Environment]::GetFolderPath('CommonPrograms'),
+        (Join-Path $env:APPDATA 'Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar')
+      ) | Where-Object { $_ -and (Test-Path $_) }
+      $updated = 0
+      foreach ($dir in $dirs) {
+        Get-ChildItem -Path $dir -Filter '*.lnk' -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+          try {
+            $lnk = $shell.CreateShortcut($_.FullName)
+            $tp = [string]$lnk.TargetPath
+            if ($tp -match '(?i)antigravity\\.exe$') {
+              $args = [string]$lnk.Arguments
+              $cleaned = ($args -replace '(?i)\\s*--remote-debugging-port=\\d+', '' -replace '(?i)\\s*--remote-debugging-address=[^\\s]+', '').Trim()
+              if ($enable) {
+                $nextArgs = ($cleaned + " --remote-debugging-port=$port --remote-debugging-address=127.0.0.1").Trim()
+              } else {
+                $nextArgs = $cleaned
+              }
+              if ($nextArgs -ne $args.Trim()) {
+                $lnk.Arguments = $nextArgs
+                $lnk.Save()
+                $updated++
+              }
+            }
+          } catch {}
+        }
+      }
+      Write-Output $updated
+    `;
+    const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psScript], {
+      encoding: 'utf8',
+      windowsHide: true
+    });
+    return parseInt(String(out || '').trim(), 10) || 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
 async function main() {
   if (sourcePluginDir && path.resolve(sourcePluginDir) !== path.resolve(targetPluginDir)) {
     console.log('1. Copying plugin from', sourcePluginDir, 'to:', targetPluginDir);
@@ -125,6 +174,11 @@ async function main() {
     });
   } catch (err) {
     console.warn('   Boot hook warning:', err.message);
+  }
+
+  const patchedLnkCount = patchWindowsShortcuts(true, process.env.AGY_CDP_PORT || '9222');
+  if (patchedLnkCount > 0) {
+    console.log(`   Updated ${patchedLnkCount} Antigravity shortcut(s) with --remote-debugging-port=9222.`);
   }
 
   console.log('3. Enabling plugin via LanguageServer RPC...');
@@ -162,4 +216,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { copyDirRecursive, setPluginStateViaLsRpc, enablePluginViaLsRpc, main };
+module.exports = { copyDirRecursive, setPluginStateViaLsRpc, enablePluginViaLsRpc, patchWindowsShortcuts, main };

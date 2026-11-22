@@ -52,7 +52,13 @@ async function main() {
   const installAllScript = path.join(scriptsDir, 'install_all.js');
   if (fs.existsSync(installAllScript)) {
     try {
-      const { setPluginStateViaLsRpc } = require(installAllScript);
+      const { setPluginStateViaLsRpc, patchWindowsShortcuts } = require(installAllScript);
+      if (typeof patchWindowsShortcuts === 'function') {
+        const cleanedLnk = patchWindowsShortcuts(false);
+        if (cleanedLnk > 0) {
+          console.log(`   Cleaned CDP arguments from ${cleanedLnk} shortcut(s).`);
+        }
+      }
       if (typeof setPluginStateViaLsRpc === 'function') {
         const disabled = await setPluginStateViaLsRpc(false);
         summary.lsRpcDisabled = disabled;
