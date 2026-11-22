@@ -1000,6 +1000,13 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
           }
           const action = reqData.action;
           const requestId = reqData.requestId || '';
+          if (action === 'restart') {
+            try {
+              electron.app.relaunch();
+              electron.app.exit(0);
+            } catch (_) {}
+            return;
+          }
           if (updateActionInFlight) {
             sendUpdateEventToWebContents(wc, {
               type: action === 'update' ? 'updated' : 'check',

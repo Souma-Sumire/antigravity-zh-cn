@@ -7737,6 +7737,11 @@
 
   function sendUpdateAction(action) {
     if (updateState.status === 'checking' || updateState.status === 'updating') return;
+    if (action === 'restart') {
+      console.log('__AGY_UPDATE_ACTION__:' + JSON.stringify({ action: 'restart', requestId: `${Date.now()}` }));
+      return;
+    }
+
     clearUpdateTimer();
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     updateState.requestId = requestId;
@@ -7762,6 +7767,11 @@
     if (payload.requestId && updateState.requestId && payload.requestId !== updateState.requestId) {
       return;
     }
+    if (action === 'restart') {
+      console.log('__AGY_UPDATE_ACTION__:' + JSON.stringify({ action: 'restart', requestId: `${Date.now()}` }));
+      return;
+    }
+
     clearUpdateTimer();
 
     if (payload.type === 'check') {
@@ -8233,6 +8243,18 @@
         sendUpdateAction('update');
       });
       actions.appendChild(actionBtn);
+    } else if (updateState.status === 'updated' && updateState.restartRequired) {
+      const restartBtn = document.createElement('button');
+      restartBtn.type = 'button';
+      restartBtn.className = 'agy-zh-primary-btn';
+      restartBtn.textContent = '立即重启';
+      restartBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        restartBtn.disabled = true;
+        restartBtn.textContent = '正在重启...';
+        sendUpdateAction('restart');
+      });
+      actions.appendChild(restartBtn);
     } else {
       const checkBtn = document.createElement('button');
       checkBtn.type = 'button';
