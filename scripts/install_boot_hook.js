@@ -105,6 +105,15 @@ function computeSha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
+function stripOurHookLines(code) {
+  return String(code || '').replace(/^\/\*__AGY_ZH_CN_BOOT_HOOK__\*\/[^\n]*\r?\n?/gm, '');
+}
+
+function hasOtherBootHooks(code) {
+  const cleaned = stripOurHookLines(code);
+  return /\/\*__AGY_[A-Z0-9_]+_BOOT_HOOK__\*\//.test(cleaned);
+}
+
 function syncMacOsIntegrityAndSign(headerJsonStr) {
   if (process.platform !== 'darwin') return;
   try {
@@ -270,7 +279,19 @@ function uninstall() {
 
   let restored = false;
   let restoredHeaderJson = '';
-  if (fs.existsSync(asarBakPath)) {
+  let otherHooksPresent = false;
+  try {
+    const curBuf = fs.readFileSync(asarPath);
+    const curParsed = parseAsar(curBuf);
+    const mainEntry = curParsed.header?.files?.dist?.files?.['main.js'];
+    if (mainEntry) {
+      const mainStart = curParsed.dataOffset + Number(mainEntry.offset);
+      const curMainCode = curBuf.toString('utf8', mainStart, mainStart + Number(mainEntry.size));
+      otherHooksPresent = hasOtherBootHooks(curMainCode);
+    }
+  } catch (_) {}
+
+  if (!otherHooksPresent && fs.existsSync(asarBakPath)) {
     try {
       const bakBuf = fs.readFileSync(asarBakPath);
       if (!isAsarPatched(asarBakPath)) {
@@ -302,9 +323,7 @@ function uninstall() {
       const mainStart = dataOffset + Number(mainEntry.offset);
       const currentMainCode = currentBuf.toString('utf8', mainStart, mainStart + mainEntry.size);
 
-      const cleanMainCode = currentMainCode.includes('\n')
-        ? currentMainCode.slice(currentMainCode.indexOf('\n') + 1)
-        : currentMainCode.replace(HOOK_MARKER, '');
+      const cleanMainCode = stripOurHookLines(currentMainCode);
       const cleanMainBuf = Buffer.from(cleanMainCode, 'utf8');
 
       const basePayloadLen = Number(mainEntry.offset);
@@ -378,31 +397,33 @@ function install(force = false) {
   let cleanMainCode;
 
   if (!alreadyHooked) {
-    try {
-      fs.writeFileSync(asarBakPath, currentBuf);
-      const cleanVersion = readAsarPackageVersion(currentBuf, dataOffset, header);
-      fs.writeFileSync(
-        asarBakMetaPath,
-        JSON.stringify(
-          {
-            version: cleanVersion,
-            cleanSha256: computeSha256(currentBuf),
-            backedUpAt: new Date().toISOString()
-          },
-          null,
-          2
-        ),
-        'utf8'
-      );
-      console.log('Backed up clean official app.asar to:', asarBakPath);
-    } catch (_) {}
+    if (!hasOtherBootHooks(currentMainCode)) {
+      try {
+        fs.writeFileSync(asarBakPath, currentBuf);
+        const cleanVersion = readAsarPackageVersion(currentBuf, dataOffset, header);
+        fs.writeFileSync(
+          asarBakMetaPath,
+          JSON.stringify(
+            {
+              version: cleanVersion,
+              cleanSha256: computeSha256(currentBuf),
+              backedUpAt: new Date().toISOString()
+            },
+            null,
+            2
+          ),
+          'utf8'
+        );
+        console.log('Backed up clean official app.asar to:', asarBakPath);
+      } catch (_) {}
+    }
     payloadBuf = currentBuf.subarray(dataOffset);
     cleanMainCode = currentMainCode;
   } else {
-    // 已打过补丁时，直接截断上次追加在末尾的 patchedMainBuf 并剥离首行 loaderLine，绝不依赖可能跨版本的旧备份
+    // 已打过补丁时，仅精准剥离本插件的 HOOK_MARKER 行，绝不误删其它插件（如账号切换器）的启动挂钩
     const basePayloadLen = Number(mainEntry.offset);
     payloadBuf = currentBuf.subarray(dataOffset, dataOffset + basePayloadLen);
-    cleanMainCode = currentMainCode.slice(currentMainCode.indexOf('\n') + 1);
+    cleanMainCode = stripOurHookLines(currentMainCode);
   }
 
   const patchedMainBuf = Buffer.from(loaderLine + cleanMainCode, 'utf8');
