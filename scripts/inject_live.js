@@ -93,18 +93,29 @@ function evalInTarget(wsUrl, expression) {
   });
 }
 
-async function injectOnce(action = 'apply') {
-  if (!fs.existsSync(devToolsPortFile)) {
-    throw new Error(
-      'DevToolsActivePort not found（Antigravity 2.33.0+ 默认关闭 CDP 调试端口；主进程 Boot Hook 已安装时重启应用即可原生生效，如需热重载请使用 --remote-debugging-port=0 启动）'
-    );
+async function resolveActivePort() {
+  if (process.env.AGY_CDP_PORT) {
+    const envPort = parseInt(process.env.AGY_CDP_PORT, 10);
+    if (envPort > 0) return envPort;
   }
+  if (fs.existsSync(devToolsPortFile)) {
+    const lines = fs.readFileSync(devToolsPortFile, 'utf8').trim().split(/\r?\n/);
+    const port = parseInt(lines[0], 10);
+    if (port && !isNaN(port)) return port;
+  }
+  for (const fallbackPort of [9222]) {
+    try {
+      const list = await httpGetJson(fallbackPort, '/json/list');
+      if (Array.isArray(list)) return fallbackPort;
+    } catch (_) {}
+  }
+  throw new Error(
+    'DevToolsActivePort not found（Antigravity 2.33.0+ 默认关闭 CDP 调试端口；主进程 Boot Hook 已安装时重启应用即可原生生效，如需热重载请使用 --remote-debugging-port=9222 启动）'
+  );
+}
 
-  const lines = fs.readFileSync(devToolsPortFile, 'utf8').trim().split(/\r?\n/);
-  const port = parseInt(lines[0], 10);
-  if (!port || isNaN(port)) {
-    throw new Error('Invalid port in DevToolsActivePort');
-  }
+async function injectOnce(action = 'apply') {
+  const port = await resolveActivePort();
 
   let titleCacheCode = '';
   try {

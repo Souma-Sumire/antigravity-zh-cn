@@ -362,14 +362,19 @@ class ZhCnSidecarBridge {
 
     try {
       ensureAsarBootHook();
-      const port = readDevToolsPort();
-      if (!port) {
-        this.isConnecting = false;
-        return;
+      let port = readDevToolsPort();
+      let target = port ? await fetchMainTarget(port) : null;
+      if (!target) {
+        const envPort = parseInt(process.env.AGY_CDP_PORT || '9222', 10);
+        if (envPort > 0 && envPort !== port) {
+          const fallbackTarget = await fetchMainTarget(envPort);
+          if (fallbackTarget) {
+            port = envPort;
+            target = fallbackTarget;
+          }
+        }
       }
-
-      const target = await fetchMainTarget(port);
-      if (!target || !target.webSocketDebuggerUrl) {
+      if (!port || !target || !target.webSocketDebuggerUrl) {
         this.isConnecting = false;
         return;
       }
