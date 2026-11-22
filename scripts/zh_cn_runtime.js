@@ -8002,8 +8002,8 @@
     header.appendChild(titleEl);
     menu.appendChild(header);
 
-    // 2. 单行语言切换 Switch + 联网翻译会话标题 Switch
-    const createSwitchRow = (labelText, checked, onChange) => {
+    // 2. 单行语言切换 Switch + 联网翻译会话标题 Switch（原地切换 class 保留滑动动画）
+    const createSwitchRow = (labelText, getChecked, onToggle) => {
       const row = document.createElement('div');
       row.className = 'agy-zh-option-row';
 
@@ -8013,9 +8013,11 @@
 
       const sw = document.createElement('button');
       sw.type = 'button';
-      sw.className = `agy-zh-switch${checked ? ' on' : ''}`;
-      sw.setAttribute('role', 'switch');
-      sw.setAttribute('aria-checked', checked ? 'true' : 'false');
+      const syncVisual = (val) => {
+        sw.className = `agy-zh-switch${val ? ' on' : ''}`;
+        sw.setAttribute('aria-checked', val ? 'true' : 'false');
+      };
+      syncVisual(getChecked());
 
       const knob = document.createElement('span');
       knob.className = 'agy-zh-switch-knob';
@@ -8023,7 +8025,8 @@
 
       sw.addEventListener('click', (e) => {
         e.stopPropagation();
-        onChange();
+        const nextVal = onToggle();
+        syncVisual(Boolean(nextVal));
       });
 
       row.appendChild(lbl);
@@ -8032,17 +8035,30 @@
     };
 
     menu.appendChild(
-      createSwitchRow('简体中文', currentLang === 'zh-CN', () => {
-        window.__AGY_I18N__.setLanguage(currentLang === 'zh-CN' ? 'en-US' : 'zh-CN');
-        showContextMenu();
-      })
+      createSwitchRow(
+        '简体中文',
+        () => (window.__AGY_I18N__ ? window.__AGY_I18N__.getLanguage() : currentLang) === 'zh-CN',
+        () => {
+          const i18n = window.__AGY_I18N__;
+          const cur = i18n ? i18n.getLanguage() : currentLang;
+          const next = cur === 'zh-CN' ? 'en-US' : 'zh-CN';
+          if (i18n) i18n.setLanguage(next);
+          else setLanguage(next);
+          return next === 'zh-CN';
+        }
+      )
     );
 
     menu.appendChild(
-      createSwitchRow('联网翻译会话标题', isTitleTranslationEnabled(), () => {
-        setTitleTranslationEnabled(!isTitleTranslationEnabled());
-        showContextMenu();
-      })
+      createSwitchRow(
+        '联网翻译会话标题',
+        () => isTitleTranslationEnabled(),
+        () => {
+          const next = !isTitleTranslationEnabled();
+          setTitleTranslationEnabled(next);
+          return next;
+        }
+      )
     );
 
     // 4. 底部更新区
@@ -8173,7 +8189,7 @@
     }
   }
 
-  const SIDEBAR_UI_VERSION = '4';
+  const SIDEBAR_UI_VERSION = '5';
 
   function mountToggleBadge() {
     ensureZhCnStyles();
@@ -8206,28 +8222,26 @@
       btn.setAttribute('translate', 'no');
       btn.setAttribute('data-plugin-id', 'zh-cn-ui');
       btn.setAttribute('data-external-plugin', 'true');
-
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (contextMenuEl) {
-          hideContextMenu();
-        } else {
-          showContextMenu();
-        }
-      });
-
-      btn.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (contextMenuEl) {
-          hideContextMenu();
-        } else {
-          showContextMenu();
-        }
-      });
-
-      ensureOutsideHandlers();
     }
+
+    // 每次挂载/热重载都覆盖 onclick / oncontextmenu 并委托给最新的 window.__AGY_I18N__，避免旧闭包残留
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const i18n = window.__AGY_I18N__;
+      if (document.getElementById('agy-zh-cn-context-menu')) {
+        if (i18n && i18n.hideContextMenu) i18n.hideContextMenu();
+        else hideContextMenu();
+      } else {
+        if (i18n && i18n.showContextMenu) i18n.showContextMenu();
+        else showContextMenu();
+      }
+    };
+    btn.oncontextmenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      btn.onclick(e);
+    };
+    ensureOutsideHandlers();
 
     // 插在设置按钮（若存在账号切换器则插在其上方）之前，绝不将原生“设置”顶上去，也不破坏账号切换器与设置的相邻关系
     const anchorTarget = getSidebarAnchorTarget(settingsBtn);
