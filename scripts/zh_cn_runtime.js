@@ -7078,15 +7078,17 @@
       return n.nodeValue;
     });
     const combinedOrig = origParts.join('');
-    if (!combinedOrig.trim()) return false;
+    const combinedTranslated = combinedOrig.trim() ? translateText(combinedOrig) : null;
 
-    const combinedTranslated = translateText(combinedOrig);
     if (combinedTranslated) {
       childNodes.forEach((n, idx) => {
         let rec = state.nodeMap.get(n);
         if (!rec) {
-          rec = { orig: origParts[idx], translated: null };
+          rec = { orig: origParts[idx], translated: null, compound: true };
           state.nodeMap.set(n, rec);
+        } else {
+          rec.orig = origParts[idx];
+          rec.compound = true;
         }
         const targetVal = idx === 0 ? combinedTranslated : '';
         rec.translated = targetVal;
@@ -7097,6 +7099,19 @@
       });
       return true;
     }
+
+    childNodes.forEach((n, idx) => {
+      const rec = state.nodeMap.get(n);
+      if (rec && rec.compound) {
+        rec.orig = origParts[idx];
+        rec.translated = null;
+        rec.compound = false;
+        state.translatedNodes.delete(n);
+        if (n.nodeValue !== origParts[idx]) {
+          n.nodeValue = origParts[idx];
+        }
+      }
+    });
     return false;
   }
   function isModelMenuBadgeContext(el) {
@@ -7130,13 +7145,18 @@
     }
 
     const currentVal = node.nodeValue;
-    if (!currentVal || !currentVal.trim()) return;
+    const existingRecord = state.nodeMap.get(node);
+    const isCompoundClearedByApp = Boolean(
+      existingRecord && existingRecord.compound && currentVal !== existingRecord.translated
+    );
+    if ((!currentVal || !currentVal.trim()) && !isCompoundClearedByApp) return;
 
     if (currentLang === 'zh-CN') {
       const inMarkdownRoot = Boolean(parent.closest && parent.closest('[data-markdown-root]') && !isCommentUiElement(parent));
       if (!inMarkdownRoot && tryTranslateCompoundTextNodes(parent)) {
         return;
       }
+      if (!currentVal || !currentVal.trim()) return;
       let record = state.nodeMap.get(node);
       if (record) {
         if (currentVal === record.translated) {
