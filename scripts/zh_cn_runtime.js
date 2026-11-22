@@ -36,11 +36,18 @@
   } catch (_) {}
 
   const state = window.__AGY_I18N_STATE__ || {};
+  const instanceId = (state.instanceId || 0) + 1;
+  state.instanceId = instanceId;
   if (!state.nodeMap) state.nodeMap = new WeakMap();
   if (!state.attrMap) state.attrMap = new WeakMap();
   if (!state.translatedNodes) state.translatedNodes = new Set();
   if (!state.translatedAttrElements) state.translatedAttrElements = new Set();
   window.__AGY_I18N_STATE__ = state;
+
+  if (state.sidebarEnsureTimer) {
+    clearTimeout(state.sidebarEnsureTimer);
+    state.sidebarEnsureTimer = null;
+  }
 
   if (state.observer) {
     try {
@@ -6550,7 +6557,7 @@
     if (!str || typeof str !== 'string') return null;
     const trimmed = str.trim();
     if (!trimmed) return null;
-    if (!/[A-Za-z]/.test(trimmed)) return null;
+    if (!/[A-Za-z\uFFFD]/.test(trimmed) && !customDict[trimmed]) return null;
     if (trimmed.toLowerCase() === 'antigravity') return str;
 
     if (customDict[trimmed]) {
@@ -7194,12 +7201,14 @@
         }
       }
       if (!translated && parent && parent.closest && parent.closest('[data-testid="conversation-row-sidebar"], [data-testid*="conversation-row"]')) {
-        const relMatch = record.orig.trim().match(/^(\d+)\s*(mo|w|d|h|m|y)$/i);
+        const relTrimmed = record.orig.trim();
+        const relMatch = relTrimmed.match(/^(\d+)\s*(mo|w|d|h|m|y)$/i);
         if (relMatch) {
           const unitMap = { mo: '个月前', w: '周前', d: '天前', h: '小时前', m: '分钟前', y: '年前' };
           const unitZh = unitMap[relMatch[2].toLowerCase()];
           if (unitZh) {
-            translated = formatPangu(`${relMatch[1]} ${unitZh}`);
+            const relRes = formatPangu(`${relMatch[1]} ${unitZh}`);
+            translated = record.orig.replace(relTrimmed, () => relRes);
           }
         }
       }
@@ -7472,7 +7481,7 @@
         return;
       }
       const record = state.nodeMap.get(node);
-      if (record && record.translated && node.nodeValue === record.orig) {
+      if (record && typeof record.translated === 'string' && node.nodeValue === record.orig) {
         node.nodeValue = record.translated;
       }
     });
@@ -7486,7 +7495,7 @@
         for (let i = 0; i < ATTR_LIST.length; i++) {
           const attr = ATTR_LIST[i];
           const info = elRecord[attr];
-          if (info && info.translated && el.getAttribute(attr) === info.orig) {
+          if (info && typeof info.translated === 'string' && el.getAttribute(attr) === info.orig) {
             el.setAttribute(attr, info.translated);
           }
         }
@@ -7496,16 +7505,27 @@
 
   function scheduleChunkedBodyWalk() {
     if (typeof document === 'undefined' || !document.body) return;
-    const queue = [document.body];
+    const queue = [{ node: document.body, depth: 0 }];
     let guard = 0;
     while (queue.length > 0 && guard < 400) {
       guard++;
-      const cur = queue.shift();
+      const { node: cur, depth } = queue.shift();
       if (!cur || !cur.isConnected) continue;
       if (cur.nodeType === 1 && cur.id !== 'agy-zh-cn-sidebar-btn' && cur.id !== 'agy-zh-cn-context-menu') {
-        if (cur.children && cur.children.length > 0 && (cur === document.body || cur.querySelectorAll('*').length > 60)) {
-          for (let i = 0; i < cur.children.length; i++) {
-            queue.push(cur.children[i]);
+        if (depth < 4 && cur.children && cur.children.length > 0) {
+          if (cur !== document.body && shouldSkipElement(cur)) {
+            translateCommentUiRoots(cur);
+            continue;
+          }
+          processAttributes(cur);
+          const children = cur.childNodes;
+          for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            if (child.nodeType === 1) {
+              queue.push({ node: child, depth: depth + 1 });
+            } else if (child.nodeType === 3 && child.nodeValue && child.nodeValue.trim()) {
+              pendingNodes.add(child);
+            }
           }
           continue;
         }
@@ -7513,23 +7533,31 @@
       pendingNodes.add(cur);
     }
     for (let i = 0; i < queue.length; i++) {
-      pendingNodes.add(queue[i]);
+      pendingNodes.add(queue[i].node);
     }
     scheduleRafFlush();
   }
 
   function restoreAllToEnglish() {
     state.translatedNodes.forEach((node) => {
+      if (!node || !node.isConnected) {
+        state.translatedNodes.delete(node);
+        return;
+      }
       const record = state.nodeMap.get(node);
-      if (record && record.orig) {
+      if (record && typeof record.orig === 'string' && node.nodeValue !== record.orig) {
         node.nodeValue = record.orig;
       }
     });
     state.translatedAttrElements.forEach((el) => {
+      if (!el || !el.isConnected) {
+        state.translatedAttrElements.delete(el);
+        return;
+      }
       const elRecord = state.attrMap.get(el);
       if (elRecord) {
         for (const attr of ATTR_LIST) {
-          if (elRecord[attr] && elRecord[attr].orig) {
+          if (elRecord[attr] && typeof elRecord[attr].orig === 'string' && el.getAttribute(attr) !== elRecord[attr].orig) {
             el.setAttribute(attr, elRecord[attr].orig);
           }
         }
@@ -7563,7 +7591,7 @@
 
   function flushPending() {
     rafScheduled = false;
-    if (currentLang !== 'zh-CN') {
+    if (state.instanceId !== instanceId || currentLang !== 'zh-CN') {
       pendingNodes.clear();
       return;
     }
@@ -7585,14 +7613,18 @@
         }
       }
     }
-    translateFileTreeSidebarHeaders();
-    sanitizeBrandAndWorkspaceHeaders();
+    if (pendingNodes.size === 0) {
+      translateFileTreeSidebarHeaders();
+      sanitizeBrandAndWorkspaceHeaders();
+    }
   }
 
   function scheduleRafFlush() {
     if (!rafScheduled) {
       rafScheduled = true;
-      window.requestAnimationFrame(flushPending);
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(flushPending);
+      }
       setTimeout(() => { if (rafScheduled) flushPending(); }, 32);
     }
   }
@@ -7777,10 +7809,6 @@
     if (payload.requestId && updateState.requestId && payload.requestId !== updateState.requestId) {
       return;
     }
-    if (action === 'restart') {
-      console.log('__AGY_UPDATE_ACTION__:' + JSON.stringify({ action: 'restart', requestId: `${Date.now()}` }));
-      return;
-    }
 
     clearUpdateTimer();
 
@@ -7796,6 +7824,7 @@
         updateState.status = 'error';
         updateState.error = payload.error || '检查更新失败';
       }
+      updateToggleBadge();
       refreshContextMenuIfOpen();
       return;
     }
@@ -7807,10 +7836,12 @@
         updateState.latestHash = updateState.currentHash;
         updateState.restartRequired = Boolean(payload.restartRequired);
         updateState.error = '';
+        updateToggleBadge();
         showContextMenu();
       } else {
         updateState.status = 'error';
         updateState.error = payload.error || '更新失败';
+        updateToggleBadge();
         refreshContextMenuIfOpen();
       }
     }
@@ -7818,19 +7849,12 @@
 
   let contextMenuEl = null;
 
-  function handleMenuKeydown(e) {
-    if (e.key === 'Escape' || e.code === 'Escape') {
-      hideContextMenu();
-    }
-  }
-
   function hideContextMenu() {
     const el = document.getElementById('agy-zh-cn-context-menu');
     if (el && el.parentNode) {
       el.parentNode.removeChild(el);
     }
     contextMenuEl = null;
-    document.removeEventListener('keydown', handleMenuKeydown, true);
   }
 
   function ensureZhCnStyles() {
@@ -7882,51 +7906,6 @@
         font-size: 13px;
         font-weight: 600;
         color: var(--foreground, #0a0a0c);
-      }
-      .agy-zh-ver {
-        font-size: 11px;
-        font-variant-numeric: tabular-nums;
-        color: var(--muted-foreground, #71717a);
-      }
-      .agy-zh-list {
-        padding: 6px;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .agy-zh-lang-item {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 8px 10px;
-        border-radius: 8px;
-        border: none;
-        background: transparent;
-        color: var(--foreground, #0a0a0c);
-        font-family: inherit;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.14s ease;
-        text-align: left;
-      }
-      .agy-zh-lang-item:hover {
-        background: color-mix(in srgb, var(--foreground, #888) 6%, transparent);
-      }
-      .agy-zh-lang-item.active {
-        background: color-mix(in srgb, var(--primary, #2f75c3) 10%, transparent);
-      }
-      .agy-zh-lang-sub {
-        font-size: 11px;
-        color: var(--muted-foreground, #71717a);
-        margin-left: 6px;
-        font-weight: 400;
-      }
-      .agy-zh-check {
-        color: var(--primary, #2f75c3);
-        display: inline-flex;
-        align-items: center;
       }
       .agy-zh-option-row + .agy-zh-option-row {
         border-top: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
@@ -8066,7 +8045,6 @@
         filter: brightness(1.08);
       }
     `;
-    document.head.appendChild(styleEl);
   }
 
   function showContextMenu() {
@@ -8079,7 +8057,7 @@
     if (anchorBtn && typeof anchorBtn.getBoundingClientRect === 'function') {
       const rect = anchorBtn.getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) {
-        const clampedLeft = Math.min(Math.max(8, Math.round(rect.left)), Math.max(8, window.innerWidth - 312));
+        const clampedLeft = Math.min(Math.max(8, Math.round(rect.left)), Math.max(8, window.innerWidth - 276));
         posLeft = `${clampedLeft}px`;
         posBottom = `${Math.max(8, Math.round(window.innerHeight - rect.top + 8))}px`;
       }
@@ -8180,6 +8158,7 @@
 
       const sw = document.createElement('button');
       sw.type = 'button';
+      sw.setAttribute('role', 'switch');
       const syncVisual = (val) => {
         sw.className = `agy-zh-switch${val ? ' on' : ''}`;
         sw.setAttribute('aria-checked', val ? 'true' : 'false');
@@ -8217,6 +8196,7 @@
     const footer = document.createElement('div');
     footer.className = 'agy-zh-footer';
 
+    let statusEl = null;
     const isBusy = updateState.status === 'checking' || updateState.status === 'updating';
     if (updateState.status !== 'idle') {
       const statusTextMap = {
@@ -8227,7 +8207,7 @@
         updated: updateState.restartRequired ? '更新完成，请重启 Antigravity 生效' : '界面翻译已热更新生效',
         error: updateState.error || '检查更新失败，请重试'
       };
-      const statusEl = document.createElement('div');
+      statusEl = document.createElement('div');
       statusEl.className = 'agy-zh-status';
       if (updateState.status === 'available') {
         statusEl.style.borderLeftColor = 'var(--primary, #2f75c3)';
@@ -8260,9 +8240,19 @@
       restartBtn.textContent = '立即重启';
       restartBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (restartBtn.disabled) return;
         restartBtn.disabled = true;
         restartBtn.textContent = '正在重启...';
         sendUpdateAction('restart');
+        setTimeout(() => {
+          if (state.instanceId !== instanceId) return;
+          restartBtn.disabled = false;
+          restartBtn.textContent = '立即重启';
+          if (statusEl && statusEl.isConnected) {
+            statusEl.style.borderLeftColor = '#d97706';
+            statusEl.textContent = '未能自动重启（主进程 Hook 尚未重载），请手动重启 Antigravity';
+          }
+        }, 3000);
       });
       actions.appendChild(restartBtn);
     } else {
@@ -8291,7 +8281,6 @@
 
     document.body.appendChild(menu);
     contextMenuEl = menu;
-    document.addEventListener('keydown', handleMenuKeydown, true);
   }
 
   function updateToggleBadge() {
@@ -8316,6 +8305,14 @@
       return accountBtn;
     }
     return settingsBtn;
+  }
+
+  function getNormalizedSidebarBtnClass(settingsBtn) {
+    const raw = typeof settingsBtn.className === 'string' ? settingsBtn.className : '';
+    return raw
+      .split(/\s+/)
+      .filter((cls) => cls && !/^(?:bg-(?:accent|muted|secondary|sidebar-accent|sidebar-muted)(?:\/\d+)?|active)$/.test(cls))
+      .join(' ');
   }
 
   function ensureOutsideHandlers() {
@@ -8365,7 +8362,7 @@
     window.addEventListener('blur', window.__agyBlurHandler);
   }
 
-  const SIDEBAR_UI_VERSION = '8';
+  const SIDEBAR_UI_VERSION = '9';
 
   function mountToggleBadge() {
     ensureZhCnStyles();
@@ -8421,8 +8418,9 @@
       settingsBtn.parentElement.insertBefore(btn, anchorTarget);
     }
 
-    if (btn.className !== settingsBtn.className) {
-      btn.className = settingsBtn.className;
+    const nextClass = getNormalizedSidebarBtnClass(settingsBtn);
+    if (btn.className !== nextClass) {
+      btn.className = nextClass;
     }
 
     const settingsIconEl = settingsBtn.querySelector('span');
@@ -8498,7 +8496,7 @@
       updateToggleBadge();
       // 让出当前点击事件帧，保证滑块动画零卡顿；先 O(1) 秒级还原已缓存节点，再按 6ms 时间片分帧补扫全页
       const runAsyncSwitch = () => {
-        if (currentLang !== 'zh-CN') return;
+        if (state.instanceId !== instanceId || currentLang !== 'zh-CN') return;
         fastRestoreCachedChinese();
         scheduleChunkedBodyWalk();
       };
@@ -8529,6 +8527,7 @@
           window.localStorage.setItem(TITLE_TRANS_STORAGE_KEY, enabled ? '1' : '0');
         } catch (_) {}
         if (prev !== enabled && currentLang === 'zh-CN') {
+          translateCache.clear();
           restoreAllToEnglish();
           state.nodeMap = new WeakMap();
           state.translatedNodes.clear();
@@ -8543,6 +8542,7 @@
         window.localStorage.setItem(TITLE_CACHE_STORAGE_KEY, JSON.stringify(window.__AGY_TITLE_CACHE__));
       } catch (_) {}
       if (currentLang === 'zh-CN' && isTitleTranslationEnabled()) {
+        translateCache.clear();
         restoreAllToEnglish();
         state.nodeMap = new WeakMap();
         state.translatedNodes.clear();
@@ -8556,6 +8556,7 @@
     formatPangu: (text) => formatPangu(text),
     apply: () => {
       customDict = getCustomDict();
+      translateCache.clear();
       restoreAllToEnglish();
       state.nodeMap = new WeakMap();
       state.attrMap = new WeakMap();
@@ -8589,47 +8590,61 @@
     })
   };
 
-  function startObserver() {
-    if (!document.body) {
-      window.addEventListener('DOMContentLoaded', startObserver, { once: true });
-      return;
-    }
-    document.documentElement.lang = currentLang;
-    mountToggleBadge();
-    if (currentLang === 'zh-CN') {
-      walkAndTranslate(document.body);
-    }
-
   function cleanupRemovedNode(node) {
-    if (!node) return;
-    if (state.translatedNodes) state.translatedNodes.delete(node);
-    if (state.translatedAttrElements) state.translatedAttrElements.delete(node);
-    if (node.nodeType === 1 && typeof document !== 'undefined' && typeof document.createTreeWalker === 'function') {
+    if (!node || (state.translatedNodes.size === 0 && state.translatedAttrElements.size === 0)) return;
+    state.translatedNodes.delete(node);
+    state.translatedAttrElements.delete(node);
+    if (
+      node.nodeType === 1 &&
+      node.childNodes &&
+      node.childNodes.length > 0 &&
+      typeof document !== 'undefined' &&
+      typeof document.createTreeWalker === 'function'
+    ) {
       try {
         const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
         let curr = walker.nextNode();
         while (curr) {
-          if (state.translatedNodes) state.translatedNodes.delete(curr);
-          if (state.translatedAttrElements) state.translatedAttrElements.delete(curr);
+          state.translatedNodes.delete(curr);
+          state.translatedAttrElements.delete(curr);
           curr = walker.nextNode();
         }
       } catch (_) {}
     }
   }
 
-    let sidebarEnsureTimer = null;
-    function scheduleEnsureSidebarButton() {
-      if (sidebarEnsureTimer) return;
-      sidebarEnsureTimer = setTimeout(() => {
-        sidebarEnsureTimer = null;
-        const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
-        if (!settingsBtn) return;
-        const anchorTarget = getSidebarAnchorTarget(settingsBtn);
-        const myBtn = document.getElementById('agy-zh-cn-sidebar-btn');
-        if (!myBtn || myBtn.nextElementSibling !== anchorTarget || myBtn.className !== settingsBtn.className) {
-          mountToggleBadge();
-        }
-      }, 300);
+  function scheduleEnsureSidebarButton() {
+    if (state.sidebarEnsureTimer) return;
+    state.sidebarEnsureTimer = setTimeout(() => {
+      state.sidebarEnsureTimer = null;
+      if (state.instanceId !== instanceId) return;
+      const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
+      if (!settingsBtn) return;
+      const anchorTarget = getSidebarAnchorTarget(settingsBtn);
+      const myBtn = document.getElementById('agy-zh-cn-sidebar-btn');
+      const expectedClass = getNormalizedSidebarBtnClass(settingsBtn);
+      if (!myBtn || myBtn.nextElementSibling !== anchorTarget || myBtn.className !== expectedClass) {
+        mountToggleBadge();
+      }
+    }, 300);
+  }
+
+  function startObserver() {
+    if (!document.body) {
+      window.addEventListener(
+        'DOMContentLoaded',
+        () => {
+          if (state.instanceId !== instanceId) return;
+          startObserver();
+        },
+        { once: true }
+      );
+      return;
+    }
+    document.documentElement.lang = currentLang;
+    mountToggleBadge();
+    if (currentLang === 'zh-CN') {
+      walkAndTranslate(document.body);
     }
 
     const observer = new MutationObserver((mutations) => {
@@ -8760,8 +8775,10 @@
 
         const origNativeSend = window.nativeNotifications.send;
         window.nativeNotifications.send = function (options) {
+          const i18n = window.__AGY_I18N__;
+          const activeLang = i18n && typeof i18n.getLanguage === "function" ? i18n.getLanguage() : currentLang;
           const translator = window.__AGY_TRANSLATE_NOTIFICATION__ || translateNotificationText;
-          if (currentLang === "zh-CN" && options && typeof options === "object") {
+          if (activeLang === "zh-CN" && options && typeof options === "object") {
             const copy = Object.assign({}, options);
             if (typeof copy.title === "string") {
               copy.title = translator(copy.title);
@@ -8783,6 +8800,10 @@
     if (!setupNativeNotificationsHook()) {
       let tries = 0;
       const interval = setInterval(() => {
+        if (state.instanceId !== instanceId) {
+          clearInterval(interval);
+          return;
+        }
         tries++;
         if (setupNativeNotificationsHook() || tries > 60) {
           clearInterval(interval);
@@ -8792,29 +8813,19 @@
 
     // 2. Hook 标准 window.Notification
     let nativeNotif = window.__AGY_REAL_NATIVE_NOTIF__;
-    if (!nativeNotif) {
-      try {
-        if (typeof document !== "undefined" && document.body) {
-          const iframe = document.createElement("iframe");
-          iframe.style.display = "none";
-          document.body.appendChild(iframe);
-          nativeNotif = iframe.contentWindow.Notification;
-          window.__AGY_REAL_NATIVE_NOTIF__ = nativeNotif;
-          iframe.remove();
-        }
-      } catch (_) {}
-      if (!nativeNotif) {
-        nativeNotif = window.Notification;
-        window.__AGY_REAL_NATIVE_NOTIF__ = nativeNotif;
-      }
+    if (!nativeNotif && window.Notification && !window.Notification.__agyProxyHooked) {
+      nativeNotif = window.Notification;
+      window.__AGY_REAL_NATIVE_NOTIF__ = nativeNotif;
     }
 
-    if (window.Notification && !window.Notification.__agyProxyHooked) {
+    if (window.Notification && nativeNotif && !window.Notification.__agyProxyHooked) {
       try {
         const proxy = new Proxy(nativeNotif, {
           construct(target, [title, options]) {
+            const i18n = window.__AGY_I18N__;
+            const activeLang = i18n && typeof i18n.getLanguage === "function" ? i18n.getLanguage() : currentLang;
             const translator = window.__AGY_TRANSLATE_NOTIFICATION__ || translateNotificationText;
-            if (currentLang === "zh-CN") {
+            if (activeLang === "zh-CN") {
               const transTitle = translator(title);
               const transOpts = options && typeof options === "object" ? Object.assign({}, options) : options;
               if (transOpts && typeof transOpts.body === "string") {

@@ -557,22 +557,28 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       for (const method of ['showMessageBox', 'showMessageBoxSync', 'showOpenDialog', 'showOpenDialogSync', 'showSaveDialog', 'showSaveDialogSync']) {
         if (typeof electron.dialog[method] === 'function') {
           const origFn = electron.dialog[method].bind(electron.dialog);
-          electron.dialog[method] = function (winOrOpts, maybeOpts) {
+          electron.dialog[method] = function (winOrOpts, maybeOpts, ...rest) {
             if (maybeOpts && typeof maybeOpts === 'object') {
-              return origFn(winOrOpts, translateDialogOptions(maybeOpts));
+              return origFn(winOrOpts, translateDialogOptions(maybeOpts), ...rest);
             }
-            return origFn(translateDialogOptions(winOrOpts));
+            if (arguments.length <= 1) {
+              const isBrowserWindow = electron.BrowserWindow && winOrOpts instanceof electron.BrowserWindow;
+              if (winOrOpts && typeof winOrOpts === 'object' && !isBrowserWindow) {
+                return origFn(translateDialogOptions(winOrOpts));
+              }
+              return arguments.length === 0 ? origFn() : origFn(winOrOpts);
+            }
+            return origFn(winOrOpts, maybeOpts, ...rest);
           };
         }
       }
       if (typeof electron.dialog.showErrorBox === 'function') {
         const origShowErrorBox = electron.dialog.showErrorBox.bind(electron.dialog);
         electron.dialog.showErrorBox = function (title, content) {
-          const nextTitle =
-            getLanguageConfig() === 'zh-CN' && typeof title === 'string' && DIALOG_TEXT_MAP[title]
-              ? DIALOG_TEXT_MAP[title]
-              : title;
-          return origShowErrorBox(nextTitle, content);
+          const isZh = getLanguageConfig() === 'zh-CN';
+          const nextTitle = isZh && typeof title === 'string' && DIALOG_TEXT_MAP[title] ? DIALOG_TEXT_MAP[title] : title;
+          const nextContent = isZh && typeof content === 'string' && DIALOG_TEXT_MAP[content] ? DIALOG_TEXT_MAP[content] : content;
+          return origShowErrorBox(nextTitle, nextContent);
         };
       }
     }
@@ -1003,7 +1009,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
           if (action === 'restart') {
             try {
               electron.app.relaunch();
-              electron.app.exit(0);
+              electron.app.quit();
             } catch (_) {}
             return;
           }

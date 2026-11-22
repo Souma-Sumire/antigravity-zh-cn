@@ -93,29 +93,42 @@ function evalInTarget(wsUrl, expression) {
   });
 }
 
-async function resolveActivePort() {
+async function resolveActiveTargetList() {
+  const candidates = [];
+  const pushPort = (p) => {
+    const n = parseInt(p, 10);
+    if (Number.isInteger(n) && n > 0 && !candidates.includes(n)) {
+      candidates.push(n);
+    }
+  };
+
   if (process.env.AGY_CDP_PORT) {
-    const envPort = parseInt(process.env.AGY_CDP_PORT, 10);
-    if (envPort > 0) return envPort;
+    pushPort(process.env.AGY_CDP_PORT);
   }
   if (fs.existsSync(devToolsPortFile)) {
-    const lines = fs.readFileSync(devToolsPortFile, 'utf8').trim().split(/\r?\n/);
-    const port = parseInt(lines[0], 10);
-    if (port && !isNaN(port)) return port;
-  }
-  for (const fallbackPort of [9222]) {
     try {
-      const list = await httpGetJson(fallbackPort, '/json/list');
-      if (Array.isArray(list)) return fallbackPort;
+      const lines = fs.readFileSync(devToolsPortFile, 'utf8').trim().split(/\r?\n/);
+      pushPort(lines[0]);
     } catch (_) {}
   }
+  pushPort(9222);
+
+  for (const port of candidates) {
+    try {
+      const targets = await httpGetJson(port, '/json/list');
+      if (Array.isArray(targets)) {
+        return { port, targets };
+      }
+    } catch (_) {}
+  }
+
   throw new Error(
     'DevToolsActivePort not found（Antigravity 2.33.0+ 默认关闭 CDP 调试端口；主进程 Boot Hook 已安装时重启应用即可原生生效，如需热重载请使用 --remote-debugging-port=9222 启动）'
   );
 }
 
 async function injectOnce(action = 'apply') {
-  const port = await resolveActivePort();
+  const { targets } = await resolveActiveTargetList();
 
   let titleCacheCode = '';
   try {
@@ -150,7 +163,6 @@ async function injectOnce(action = 'apply') {
     expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.setLanguage("zh-CN"), window.__AGY_I18N__.getStats());`;
   }
 
-  const targets = await httpGetJson(port, '/json/list');
   const pages = targets.filter(
     (t) =>
       (t.type === 'page' || (t.type === 'iframe' && String(t.url).startsWith('plugin://'))) &&

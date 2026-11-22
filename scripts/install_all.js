@@ -152,7 +152,6 @@ async function main() {
   } catch (err) {
     console.warn('   Live injection warning:', err.message);
   }
-  process.exit(0);
 }
 
 if (require.main === module) {

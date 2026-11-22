@@ -60,6 +60,9 @@ function ensureAsarBootHook() {
 }
 
 function getDevToolsPortFile() {
+  if (process.env.AGY_DEVTOOLS_PORT_FILE) {
+    return process.env.AGY_DEVTOOLS_PORT_FILE;
+  }
   if (process.platform === 'win32') {
     const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
     return path.join(appData, 'Antigravity', 'DevToolsActivePort');
@@ -174,6 +177,9 @@ class ZhCnSidecarBridge {
     this.activePort = null;
     this.isConnecting = false;
     this.reconnectTimer = null;
+    this.portWatcher = null;
+    this.portDirTimer = null;
+    this.newDocScriptId = null;
     this.updateActionInFlight = false;
   }
 
@@ -303,6 +309,7 @@ class ZhCnSidecarBridge {
       }
       const action = reqData.action;
       const requestId = reqData.requestId || '';
+      if (action === 'restart') return;
       const sendEvent = (payload) => {
         this.evaluate(
           `try{window.__AGY_I18N__&&window.__AGY_I18N__.handleUpdateEvent&&window.__AGY_I18N__.handleUpdateEvent(${JSON.stringify(payload)});}catch(_){}`
@@ -488,7 +495,25 @@ class ZhCnSidecarBridge {
       const portFile = getDevToolsPortFile();
       const portDir = path.dirname(portFile);
       const portBase = path.basename(portFile);
-      if (!fs.existsSync(portDir)) return;
+      if (!fs.existsSync(portDir)) {
+        if (!this.portDirTimer) {
+          this.portDirTimer = setInterval(() => {
+            if (fs.existsSync(portDir)) {
+              clearInterval(this.portDirTimer);
+              this.portDirTimer = null;
+              this.watchPortFile();
+              if (!this.isConnecting && (!this.ws || this.ws.readyState !== WebSocket.OPEN)) {
+                this.connect();
+              }
+            }
+          }, 30000);
+        }
+        return;
+      }
+      if (this.portDirTimer) {
+        clearInterval(this.portDirTimer);
+        this.portDirTimer = null;
+      }
       let debounceTimer = null;
       this.portWatcher = fs.watch(portDir, (_eventType, filename) => {
         if (filename && String(filename) !== portBase) return;
@@ -499,9 +524,6 @@ class ZhCnSidecarBridge {
           }
         }, 300);
       });
-      if (this.portWatcher && typeof this.portWatcher.unref === 'function') {
-        this.portWatcher.unref();
-      }
     } catch (_) {}
   }
 
@@ -515,18 +537,15 @@ class ZhCnSidecarBridge {
         ]).catch(() => {});
         this.newDocScriptId = null;
       }
-      await Promise.race([
-        this.send('Runtime.evaluate', {
-          expression: 'try{if(window.__AGY_I18N__&&window.__AGY_I18N__.setLanguage){window.__AGY_I18N__.setLanguage("en-US");}}catch(_){}',
-          returnByValue: true
-        }),
-        new Promise((r) => setTimeout(r, 500))
-      ]).catch(() => {});
     } catch (_) {}
   }
 
   stop() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.portDirTimer) {
+      clearInterval(this.portDirTimer);
+      this.portDirTimer = null;
+    }
     if (this.portWatcher) {
       try { this.portWatcher.close(); } catch (_) {}
       this.portWatcher = null;

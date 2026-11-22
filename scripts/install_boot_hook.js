@@ -85,7 +85,40 @@ function parseAsar(buf) {
   const dataOffset = 8 + u1;
   const headerJson = buf.toString('utf8', 16, 16 + u3);
   const header = JSON.parse(headerJson);
-  return { dataOffset, u3, header };
+  return { dataOffset, u3, headerJson, header };
+}
+
+function hasFileAfterMainOffset(dirFiles, mainEntryObj, mainOffset) {
+  if (!dirFiles || typeof dirFiles !== 'object') return false;
+  for (const name of Object.keys(dirFiles)) {
+    const entry = dirFiles[name];
+    if (!entry || typeof entry !== 'object') continue;
+    if (entry.files) {
+      if (hasFileAfterMainOffset(entry.files, mainEntryObj, mainOffset)) return true;
+      continue;
+    }
+    if (entry === mainEntryObj || entry.unpacked) continue;
+    if (entry.offset !== undefined && entry.size !== undefined) {
+      const entryOffset = Number(entry.offset);
+      const entrySize = Number(entry.size);
+      if (!Number.isFinite(entryOffset) || !Number.isFinite(entrySize) || entryOffset > mainOffset || entryOffset + entrySize > mainOffset) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function canTruncateMainTail(currentBuf, dataOffset, header, mainEntry) {
+  const mainOffset = Number(mainEntry.offset);
+  const mainSize = Number(mainEntry.size);
+  if (!Number.isFinite(mainOffset) || !Number.isFinite(mainSize) || mainOffset < 0 || mainSize < 0) {
+    return false;
+  }
+  if (dataOffset + mainOffset + mainSize !== currentBuf.length) {
+    return false;
+  }
+  return !hasFileAfterMainOffset(header && header.files, mainEntry, mainOffset);
 }
 
 function readAsarPackageVersion(buf, dataOffset, header) {
@@ -129,14 +162,15 @@ function syncMacOsIntegrityAndSign(headerJsonStr) {
         });
         const plistObj = JSON.parse(plistRaw);
         if (plistObj && plistObj.ElectronAsarIntegrity && plistObj.ElectronAsarIntegrity['Resources/app.asar']) {
-          plistObj.ElectronAsarIntegrity['Resources/app.asar'].hash = headerHash;
           execFileSync(
             '/usr/bin/plutil',
             ['-replace', 'ElectronAsarIntegrity.Resources/app\\.asar.hash', '-string', headerHash, infoPlistPath],
             { stdio: 'ignore' }
           );
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('   macOS Info.plist integrity warning:', err.message);
+      }
     }
     if (appBundleDir.endsWith('.app') && fs.existsSync(appBundleDir)) {
       try {
@@ -164,7 +198,7 @@ function isAsarPatched(targetAsarPath = asarPath) {
     const mainEntry = header?.files?.dist?.files?.['main.js'];
     if (!mainEntry) return false;
     const mainStart = dataOffset + Number(mainEntry.offset);
-    const probeLen = Math.min(128, Number(mainEntry.size));
+    const probeLen = Math.min(4096, Number(mainEntry.size));
     const probeBuf = Buffer.alloc(probeLen);
     fs.readSync(fd, probeBuf, 0, probeLen, mainStart);
     return probeBuf.toString('utf8').includes(HOOK_MARKER);
@@ -279,31 +313,26 @@ function uninstall() {
 
   let restored = false;
   let restoredHeaderJson = '';
-  let otherHooksPresent = false;
-  try {
-    const curBuf = fs.readFileSync(asarPath);
-    const curParsed = parseAsar(curBuf);
-    const mainEntry = curParsed.header?.files?.dist?.files?.['main.js'];
-    if (mainEntry) {
-      const mainStart = curParsed.dataOffset + Number(mainEntry.offset);
-      const curMainCode = curBuf.toString('utf8', mainStart, mainStart + Number(mainEntry.size));
-      otherHooksPresent = hasOtherBootHooks(curMainCode);
-    }
-  } catch (_) {}
+  const curBuf = fs.readFileSync(asarPath);
+  const curParsed = parseAsar(curBuf);
+  const curMainEntry = curParsed.header?.files?.dist?.files?.['main.js'];
+  const curMainStart = curMainEntry ? curParsed.dataOffset + Number(curMainEntry.offset) : 0;
+  const curMainCode = curMainEntry
+    ? curBuf.toString('utf8', curMainStart, curMainStart + Number(curMainEntry.size))
+    : '';
+  const otherHooksPresent = curMainEntry ? hasOtherBootHooks(curMainCode) : false;
 
   if (!otherHooksPresent && fs.existsSync(asarBakPath)) {
     try {
       const bakBuf = fs.readFileSync(asarBakPath);
       if (!isAsarPatched(asarBakPath)) {
-        const curBuf = fs.readFileSync(asarPath);
-        const curParsed = parseAsar(curBuf);
         const bakParsed = parseAsar(bakBuf);
         const curVer = readAsarPackageVersion(curBuf, curParsed.dataOffset, curParsed.header);
         const bakVer = readAsarPackageVersion(bakBuf, bakParsed.dataOffset, bakParsed.header);
-        const versionSafe = !curVer || !bakVer || curVer === bakVer;
+        const versionSafe = Boolean(curVer && bakVer && curVer === bakVer);
         if (versionSafe) {
           writeAsarSafely(asarPath, bakBuf);
-          restoredHeaderJson = JSON.stringify(bakParsed.header);
+          restoredHeaderJson = bakParsed.headerJson;
           console.log('Restored original app.asar from verified backup:', asarBakPath);
           restored = true;
         } else {
@@ -317,21 +346,20 @@ function uninstall() {
 
   if (!restored) {
     try {
-      const currentBuf = fs.readFileSync(asarPath);
-      const { dataOffset, header } = parseAsar(currentBuf);
-      const mainEntry = header.files.dist.files['main.js'];
-      const mainStart = dataOffset + Number(mainEntry.offset);
-      const currentMainCode = currentBuf.toString('utf8', mainStart, mainStart + mainEntry.size);
-
-      const cleanMainCode = stripOurHookLines(currentMainCode);
+      if (!curMainEntry) {
+        throw new Error('dist/main.js entry not found in app.asar');
+      }
+      const { dataOffset, header } = curParsed;
+      const cleanMainCode = stripOurHookLines(curMainCode);
       const cleanMainBuf = Buffer.from(cleanMainCode, 'utf8');
 
-      const basePayloadLen = Number(mainEntry.offset);
-      const payloadBuf = currentBuf.subarray(dataOffset, dataOffset + basePayloadLen);
+      const payloadBuf = canTruncateMainTail(curBuf, dataOffset, header, curMainEntry)
+        ? curBuf.subarray(dataOffset, dataOffset + Number(curMainEntry.offset))
+        : curBuf.subarray(dataOffset);
 
-      mainEntry.size = cleanMainBuf.length;
-      mainEntry.offset = String(payloadBuf.length);
-      mainEntry.integrity = computeIntegrity(cleanMainBuf);
+      curMainEntry.size = cleanMainBuf.length;
+      curMainEntry.offset = String(payloadBuf.length);
+      curMainEntry.integrity = computeIntegrity(cleanMainBuf);
 
       const newHeaderJson = JSON.stringify(header);
       const newHeaderBuf = buildAsarHeaderBuffer(newHeaderJson);
@@ -346,7 +374,11 @@ function uninstall() {
     }
   }
 
-  if (restored && restoredHeaderJson) {
+  if (!restored) {
+    throw new Error('Failed to restore clean app.asar.');
+  }
+
+  if (restoredHeaderJson) {
     syncMacOsIntegrityAndSign(restoredHeaderJson);
   }
 
@@ -388,7 +420,7 @@ function install(force = false) {
   const currentMainCode = currentBuf.toString('utf8', mainStart, mainStart + mainEntry.size);
   const alreadyHooked = currentMainCode.includes(HOOK_MARKER);
 
-  if (alreadyHooked && !force && currentMainCode.startsWith(loaderLine)) {
+  if (alreadyHooked && !force && currentMainCode.split(HOOK_MARKER).length === 2 && currentMainCode.includes(loaderLine)) {
     console.log('app.asar is already patched and up to date.');
     return 'already-patched';
   }
@@ -421,8 +453,9 @@ function install(force = false) {
     cleanMainCode = currentMainCode;
   } else {
     // 已打过补丁时，仅精准剥离本插件的 HOOK_MARKER 行，绝不误删其它插件（如账号切换器）的启动挂钩
-    const basePayloadLen = Number(mainEntry.offset);
-    payloadBuf = currentBuf.subarray(dataOffset, dataOffset + basePayloadLen);
+    payloadBuf = canTruncateMainTail(currentBuf, dataOffset, header, mainEntry)
+      ? currentBuf.subarray(dataOffset, dataOffset + Number(mainEntry.offset))
+      : currentBuf.subarray(dataOffset);
     cleanMainCode = stripOurHookLines(currentMainCode);
   }
 
@@ -460,9 +493,14 @@ module.exports = {
 };
 
 if (require.main === module) {
-  if (process.argv.includes('--uninstall')) {
-    uninstall();
-  } else {
-    install(process.argv.includes('--force'));
+  try {
+    if (process.argv.includes('--uninstall')) {
+      uninstall();
+    } else {
+      install(process.argv.includes('--force'));
+    }
+  } catch (err) {
+    console.error(err && err.message ? err.message : err);
+    process.exit(1);
   }
 }
