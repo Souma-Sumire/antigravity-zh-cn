@@ -7765,12 +7765,13 @@
 
     const anchorBtn = document.getElementById('agy-zh-cn-sidebar-btn');
     let posLeft = '12px';
-    let posBottom = '44px';
+    let posBottom = '52px';
     if (anchorBtn && typeof anchorBtn.getBoundingClientRect === 'function') {
       const rect = anchorBtn.getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) {
-        posLeft = `${Math.max(8, Math.round(rect.left))}px`;
-        posBottom = `${Math.max(8, Math.round(window.innerHeight - rect.top + 6))}px`;
+        const clampedLeft = Math.min(Math.max(12, Math.round(rect.left)), Math.max(12, window.innerWidth - 312));
+        posLeft = `${clampedLeft}px`;
+        posBottom = `${Math.max(12, Math.round(window.innerHeight - rect.top + 8))}px`;
       }
     }
 
@@ -7783,121 +7784,192 @@
       'position:fixed',
       `bottom:${posBottom}`,
       `left:${posLeft}`,
+      'width:296px',
       'z-index:2147483645',
-      'padding:6px 10px',
-      'border-radius:5px',
-      'border:1px solid rgba(255,255,255,0.14)',
-      'background:rgba(26,28,32,0.96)',
-      'box-shadow:0 6px 18px rgba(0,0,0,0.5)',
-      'backdrop-filter:blur(10px)',
-      '-webkit-backdrop-filter:blur(10px)',
-      'color:#e2e4e9',
+      'padding:18px 20px',
+      'border-radius:6px',
+      'border:1px solid var(--border,rgba(128,128,128,0.22))',
+      'background:var(--popover,var(--background,#ffffff))',
+      'box-shadow:0 10px 28px rgba(0,0,0,0.16)',
+      'color:var(--popover-foreground,var(--foreground,#111827))',
       'font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif',
-      'font-size:11px',
-      'line-height:1',
+      'font-size:13px',
+      'line-height:1.45',
       'user-select:none',
-      'pointer-events:auto',
-      'white-space:nowrap'
+      'pointer-events:auto'
     ].join(';');
 
-    const label = document.createElement('label');
-    label.style.cssText = [
-      'display:flex',
-      'align-items:center',
-      'gap:6px',
-      'cursor:pointer',
-      'font-size:11px',
-      'font-weight:500',
-      'padding:2px 0'
-    ].join(';');
+    // 1. 头部：标题 + 等宽版本标识
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px;';
 
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = isTitleTranslationEnabled();
-    checkbox.style.cssText = [
-      'cursor:pointer',
-      'accent-color:#3b82f6',
-      'width:13px',
-      'height:13px',
-      'margin:0'
-    ].join(';');
+    const titleEl = document.createElement('div');
+    titleEl.textContent = '简体中文语言包';
+    titleEl.style.cssText = 'font-size:15px;font-weight:600;letter-spacing:-0.01em;';
 
-    const onToggle = (e) => {
-      e.stopPropagation();
-      const nextChecked = checkbox.checked;
-      setTitleTranslationEnabled(nextChecked);
+    const verEl = document.createElement('span');
+    verEl.textContent = updateState.currentHash ? `#${updateState.currentHash}` : 'zh-cn-ui';
+    verEl.style.cssText = 'font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted-foreground,#6b7280);';
+
+    header.appendChild(titleEl);
+    header.appendChild(verEl);
+    menu.appendChild(header);
+
+    // 2. 下划线标签页语言切换
+    const tabBar = document.createElement('div');
+    tabBar.style.cssText = 'display:flex;align-items:center;gap:20px;border-bottom:1px solid var(--border,rgba(128,128,128,0.2));';
+
+    const createLangTab = (langCode, text) => {
+      const isActive = currentLang === langCode;
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.textContent = text;
+      tab.style.cssText = [
+        'background:none',
+        'border:none',
+        `border-bottom:2px solid ${isActive ? 'var(--primary,#2563eb)' : 'transparent'}`,
+        'padding:0 2px 10px 2px',
+        'margin-bottom:-1px',
+        'font-family:inherit',
+        'font-size:13px',
+        `font-weight:${isActive ? '600' : '400'}`,
+        `color:${isActive ? 'var(--foreground,inherit)' : 'var(--muted-foreground,#6b7280)'}`,
+        'cursor:pointer'
+      ].join(';');
+      tab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (currentLang !== langCode) {
+          window.__AGY_I18N__.setLanguage(langCode);
+          showContextMenu();
+        }
+      });
+      return tab;
     };
 
-    checkbox.addEventListener('change', onToggle);
+    tabBar.appendChild(createLangTab('zh-CN', '简体中文'));
+    tabBar.appendChild(createLangTab('en-US', 'English'));
+    menu.appendChild(tabBar);
 
-    const span = document.createElement('span');
-    span.textContent = '联网翻译会话标题';
+    // 3. 联网翻译会话标题开关
+    const titleSection = document.createElement('div');
+    titleSection.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--border,rgba(128,128,128,0.2));';
 
-    label.appendChild(checkbox);
-    label.appendChild(span);
-    menu.appendChild(label);
+    const titleSwitchLabel = document.createElement('span');
+    titleSwitchLabel.textContent = '联网翻译会话标题';
+    titleSwitchLabel.style.cssText = 'font-size:13px;font-weight:500;';
 
-    const divider = document.createElement('div');
-    divider.style.cssText = 'height:1px;background:rgba(255,255,255,0.1);margin:6px 0;';
-    menu.appendChild(divider);
+    const isTitleOn = isTitleTranslationEnabled();
+    const switchBtn = document.createElement('button');
+    switchBtn.type = 'button';
+    switchBtn.setAttribute('role', 'switch');
+    switchBtn.setAttribute('aria-checked', isTitleOn ? 'true' : 'false');
+    switchBtn.style.cssText = [
+      'position:relative',
+      'width:34px',
+      'height:18px',
+      'padding:0',
+      'border-radius:9999px',
+      `border:1px solid ${isTitleOn ? 'var(--primary,#2563eb)' : 'var(--border,rgba(128,128,128,0.35))'}`,
+      `background:${isTitleOn ? 'var(--primary,#2563eb)' : 'transparent'}`,
+      'cursor:pointer',
+      'flex-shrink:0'
+    ].join(';');
 
-    const updateRow = document.createElement('div');
-    updateRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:14px;padding:2px 0;';
+    const knob = document.createElement('span');
+    knob.style.cssText = [
+      'position:absolute',
+      'top:2px',
+      `left:${isTitleOn ? '17px' : '2px'}`,
+      'width:12px',
+      'height:12px',
+      'border-radius:9999px',
+      `background:${isTitleOn ? '#ffffff' : 'var(--muted-foreground,#6b7280)'}`,
+      'transition:left 0.15s ease'
+    ].join(';');
+    switchBtn.appendChild(knob);
+
+    switchBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setTitleTranslationEnabled(!isTitleTranslationEnabled());
+      showContextMenu();
+    });
+
+    titleSection.appendChild(titleSwitchLabel);
+    titleSection.appendChild(switchBtn);
+    menu.appendChild(titleSection);
+
+    // 4. 更新检查与操作区
+    const updateSection = document.createElement('div');
+    updateSection.style.cssText = 'padding-top:14px;';
+
+    const isBusy = updateState.status === 'checking' || updateState.status === 'updating';
+    const statusTextMap = {
+      idle: '词库与补丁状态正常',
+      checking: '正在检查远程更新...',
+      latest: '当前已是最新版本',
+      available: updateState.latestHash ? `发现可用更新 #${updateState.latestHash}` : '发现可用更新',
+      updating: '正在拉取并应用更新...',
+      updated: updateState.restartRequired ? '更新完成，请重启 Antigravity 生效' : '界面翻译已热更新生效',
+      error: updateState.error || '检查更新失败，请重试'
+    };
+
+    const statusBarColor =
+      updateState.status === 'available' ? 'var(--primary,#2563eb)' :
+      updateState.status === 'updated' ? '#16a34a' :
+      updateState.status === 'error' ? '#dc2626' :
+      'var(--border,rgba(128,128,128,0.4))';
+
+    const statusLine = document.createElement('div');
+    statusLine.textContent = statusTextMap[updateState.status] || statusTextMap.idle;
+    statusLine.style.cssText = [
+      `border-left:2px solid ${statusBarColor}`,
+      'padding-left:10px',
+      'font-size:12px',
+      'color:var(--muted-foreground,#6b7280)',
+      'margin-bottom:12px',
+      'word-break:break-word'
+    ].join(';');
+    updateSection.appendChild(statusLine);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
 
     const checkBtn = document.createElement('button');
     checkBtn.type = 'button';
-    const isBusy = updateState.status === 'checking' || updateState.status === 'updating';
     checkBtn.disabled = isBusy;
+    checkBtn.textContent = isBusy ? '处理中...' : '检查更新';
     checkBtn.style.cssText = [
-      'background:none',
-      'border:none',
-      'padding:0',
-      'margin:0',
+      'flex:1',
+      'padding:7px 12px',
+      'border-radius:5px',
+      'border:1px solid var(--border,rgba(128,128,128,0.35))',
+      'background:transparent',
+      'color:var(--foreground,inherit)',
       'font-family:inherit',
-      'font-size:11px',
+      'font-size:12px',
       'font-weight:500',
-      'text-align:left',
-      `color:${isBusy ? 'rgba(226,228,233,0.55)' : '#e2e4e9'}`,
+      `opacity:${isBusy ? '0.55' : '1'}`,
       `cursor:${isBusy ? 'default' : 'pointer'}`
     ].join(';');
-
-    const statusTextMap = {
-      idle: '检查更新',
-      checking: '正在检查更新...',
-      latest: '已是最新版本',
-      available: updateState.latestHash ? `发现更新 (${updateState.latestHash})` : '发现可用更新',
-      updating: '正在更新...',
-      updated: updateState.currentHash ? `已更新 (${updateState.currentHash})` : '已更新至最新',
-      error: '检查失败，点击重试'
-    };
-    checkBtn.textContent = statusTextMap[updateState.status] || '检查更新';
     checkBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       sendUpdateAction('check');
     });
-
-    const verLabel = document.createElement('span');
-    verLabel.textContent = updateState.currentHash ? `#${updateState.currentHash}` : '';
-    verLabel.style.cssText = 'font-size:10px;color:rgba(226,228,233,0.5);';
-
-    updateRow.appendChild(checkBtn);
-    updateRow.appendChild(verLabel);
-    menu.appendChild(updateRow);
+    btnRow.appendChild(checkBtn);
 
     if (updateState.status === 'available') {
       const actionBtn = document.createElement('button');
       actionBtn.type = 'button';
       actionBtn.textContent = '立即更新';
       actionBtn.style.cssText = [
-        'margin-top:6px',
-        'width:100%',
-        'padding:4px 8px',
-        'border-radius:4px',
-        'border:none',
-        'background:#2563eb',
+        'flex:1',
+        'padding:7px 12px',
+        'border-radius:5px',
+        'border:1px solid var(--primary,#2563eb)',
+        'background:var(--primary,#2563eb)',
         'color:#ffffff',
         'font-family:inherit',
-        'font-size:11px',
+        'font-size:12px',
         'font-weight:500',
         'cursor:pointer'
       ].join(';');
@@ -7905,20 +7977,11 @@
         e.stopPropagation();
         sendUpdateAction('update');
       });
-      menu.appendChild(actionBtn);
-    } else if (updateState.status === 'updated') {
-      const tip = document.createElement('div');
-      tip.textContent = updateState.restartRequired
-        ? '请重启 Antigravity 以应用全部更新'
-        : '界面翻译已热更新生效';
-      tip.style.cssText = 'margin-top:5px;font-size:10px;color:#4ade80;line-height:1.35;';
-      menu.appendChild(tip);
-    } else if (updateState.status === 'error' && updateState.error) {
-      const errTip = document.createElement('div');
-      errTip.textContent = updateState.error;
-      errTip.style.cssText = 'margin-top:5px;font-size:10px;color:#f87171;max-width:220px;white-space:normal;line-height:1.35;';
-      menu.appendChild(errTip);
+      btnRow.appendChild(actionBtn);
     }
+
+    updateSection.appendChild(btnRow);
+    menu.appendChild(updateSection);
 
     menu.addEventListener('pointerdown', (e) => e.stopPropagation());
     menu.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -7940,13 +8003,25 @@
     if (labelEl) {
       labelEl.textContent = currentLang === 'zh-CN' ? '简体中文' : 'English';
     }
+    const badgeEl = btn.querySelector('.agy-zh-cn-lang-badge');
+    if (badgeEl) {
+      badgeEl.textContent = currentLang === 'zh-CN' ? '中' : 'EN';
+    }
     const dotEl = btn.querySelector('.agy-zh-cn-update-dot');
     if (dotEl) {
       dotEl.style.display = updateState.status === 'available' ? 'inline-block' : 'none';
     }
     btn.title = currentLang === 'zh-CN'
-      ? '界面语言：简体中文（点击切换中英文，右键或点右侧图标打开设置）'
-      : 'UI Language: English (Click to toggle, right-click or gear icon for settings)';
+      ? '界面语言：简体中文（点击打开设置面板）'
+      : 'UI Language: English (Click to open settings)';
+  }
+
+  function getSidebarAnchorTarget(settingsBtn) {
+    const accountBtn = document.getElementById('agy-account-manager-btn');
+    if (accountBtn && accountBtn.parentElement === settingsBtn.parentElement) {
+      return accountBtn;
+    }
+    return settingsBtn;
   }
 
   function ensureOutsideHandlers() {
@@ -8005,12 +8080,12 @@
       btn.setAttribute('data-external-plugin', 'true');
 
       btn.addEventListener('click', (e) => {
-        if (e.target && typeof e.target.closest === 'function' && e.target.closest('.agy-zh-cn-gear-btn')) {
-          return;
-        }
         e.stopPropagation();
-        hideContextMenu();
-        window.__AGY_I18N__.toggle();
+        if (contextMenuEl) {
+          hideContextMenu();
+        } else {
+          showContextMenu();
+        }
       });
 
       btn.addEventListener('contextmenu', (e) => {
@@ -8026,9 +8101,10 @@
       ensureOutsideHandlers();
     }
 
-    // 追加在原生设置按钮之后，不打断其它插件（如账号切换器）紧贴 settings-button 上方的相邻约束
-    if (btn.parentElement !== settingsBtn.parentElement || settingsBtn.nextElementSibling !== btn) {
-      settingsBtn.parentElement.insertBefore(btn, settingsBtn.nextSibling);
+    // 插在设置按钮（若存在账号切换器则插在其上方）之前，绝不将原生“设置”顶上去，也不破坏账号切换器与设置的相邻关系
+    const anchorTarget = getSidebarAnchorTarget(settingsBtn);
+    if (btn.parentElement !== settingsBtn.parentElement || btn.nextElementSibling !== anchorTarget) {
+      settingsBtn.parentElement.insertBefore(btn, anchorTarget);
     }
 
     if (btn.className !== settingsBtn.className) {
@@ -8076,28 +8152,20 @@
       const dotEl = document.createElement('span');
       dotEl.className = 'agy-zh-cn-update-dot';
       dotEl.setAttribute('aria-hidden', 'true');
-      dotEl.style.cssText = 'display:none;width:6px;height:6px;border-radius:9999px;background:#3b82f6;';
+      dotEl.style.cssText = 'display:none;width:6px;height:6px;border-radius:9999px;background:var(--primary,#2563eb);';
 
-      const gearBtn = document.createElement('span');
-      gearBtn.className = 'agy-zh-cn-gear-btn flex items-center justify-center rounded';
-      gearBtn.title = '汉化设置与更新';
-      gearBtn.style.cssText = 'width:16px;height:16px;cursor:pointer;';
-      gearBtn.innerHTML =
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-        '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>' +
-        '</svg>';
-      gearBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (contextMenuEl) {
-          hideContextMenu();
-        } else {
-          showContextMenu();
-        }
-      });
+      const badgeEl = document.createElement('span');
+      badgeEl.className = 'agy-zh-cn-lang-badge';
+      badgeEl.style.cssText = 'font-size:10px;font-weight:500;letter-spacing:0.02em;';
+
+      const chevronWrap = document.createElement('span');
+      chevronWrap.className = 'flex items-center justify-center';
+      chevronWrap.innerHTML =
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>';
 
       rightWrap.appendChild(dotEl);
-      rightWrap.appendChild(gearBtn);
+      rightWrap.appendChild(badgeEl);
+      rightWrap.appendChild(chevronWrap);
       btn.appendChild(iconWrap);
       btn.appendChild(labelEl);
       btn.appendChild(rightWrap);
@@ -8233,8 +8301,10 @@
       sidebarEnsureTimer = setTimeout(() => {
         sidebarEnsureTimer = null;
         const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
+        if (!settingsBtn) return;
+        const anchorTarget = getSidebarAnchorTarget(settingsBtn);
         const myBtn = document.getElementById('agy-zh-cn-sidebar-btn');
-        if (settingsBtn && (!myBtn || settingsBtn.nextElementSibling !== myBtn || myBtn.className !== settingsBtn.className)) {
+        if (!myBtn || myBtn.nextElementSibling !== anchorTarget || myBtn.className !== settingsBtn.className) {
           mountToggleBadge();
         }
       }, 300);
