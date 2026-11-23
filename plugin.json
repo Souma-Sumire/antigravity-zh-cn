@@ -2,8 +2,14 @@
   "name": "zh-cn-ui",
   "displayName": "简体中文 UI 语言包",
   "version": "1.2.3",
-  "description": "为 Antigravity 2.0 (2.28.0+) 桌面端提供完整的简体中文界面汉化，支持实时注入、启动自动生效与自定义词条扩展。",
+  "description": "Google Antigravity（反重力）2.0+ 简体中文 UI 语言包插件，零依赖支持 Windows / macOS / Linux，无需退出实时热注入、一键切换中英文、更新自愈与完整无痕卸载。Chinese (Simplified) zh-CN UI localization plugin for Google Antigravity 2.0+.",
   "logo": "assets/logo.svg",
+  "author": {
+    "name": "Souma",
+    "url": "https://github.com/Souma-Sumire"
+  },
+  "homepage": "https://github.com/Souma-Sumire/antigravity-zh-cn",
+  "repository": "https://github.com/Souma-Sumire/antigravity-zh-cn",
   "suggestedPrompts": [
     "检查并刷新当前 Antigravity 界面的中文汉化状态",
     "将 Antigravity 界面语言切换为英文或恢复为中文",
