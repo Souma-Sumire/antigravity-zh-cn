@@ -180,6 +180,9 @@
     "Argon that may offload routine steps to Hydrogen. Same Argon-level quality, fewer tokens used.": "可将常规步骤分流至 Hydrogen 执行的 Argon 模型。保持 Argon 级推理质量，同时消耗更少 Token。",
     "Neon that may offload routine steps to Hydrogen. Same Neon-level quality, fewer tokens used.": "可将常规步骤分流至 Hydrogen 执行的 Neon 模型。保持 Neon 级推理质量，同时消耗更少 Token。",
     "The original Gemini 4 model for advanced workflows": "适用于高级工作流的原版 Gemini 4 模型",
+    "The original Gemini 4 model for advanced workflows. Leaving on Nov 30.": "适用于高级工作流的原版 Gemini 4 模型。将于 11月30日 下线。",
+    "For your hardest, long-horizon tasks": "适用于最复杂、长周期的深度任务",
+    "Use Hydrogen for better quality with lower quota usage. Leaving on Nov 30.": "建议使用 Hydrogen 以获得更高质量和更低配额消耗。将于 11月30日 下线。",
     "For most deep reasoning and complex problems": "适用于大多数深度推理与复杂问题",
     "For speed and efficiency in execution tasks": "适用于追求速度与效率的执行任务",
     "GPT-OSS will be removed from Antigravity on November 18, 2026.": "GPT-OSS 将于 2026 年 11 月 18 日从 Antigravity 中移除。",
@@ -6652,6 +6655,22 @@
     [
       /^Resolved\s+"(.+)"$/,
       (_m, title) => `已解决 "${title}"`
+    ],
+    [
+      /^(\d+)\s*\/\s*(\d+)\s+steps?$/i,
+      (_m, done, total) => `${done}/${total} 步`
+    ],
+    [
+      /^The original Gemini 4 model for advanced workflows\.\s*Leaving on\s+([A-Za-z]+)\s+(\d+)(?:,\s*(\d{4}))?\.?$/i,
+      (_m, month, day, year) => `适用于高级工作流的原版 Gemini 4 模型。将于 ${year ? `${year}年` : ''}${MONTH_NAMES[month.toLowerCase()] || month}${day}日 下线。`
+    ],
+    [
+      /^Use\s+([A-Za-z0-9.\- ]+?)\s+for better quality with lower quota usage\.\s*Leaving on\s+([A-Za-z]+)\s+(\d+)(?:,\s*(\d{4}))?\.?$/i,
+      (_m, model, month, day, year) => `建议使用 ${model.trim()} 以获得更高质量和更低配额消耗。将于 ${year ? `${year}年` : ''}${MONTH_NAMES[month.toLowerCase()] || month}${day}日 下线。`
+    ],
+    [
+      /^Leaving on\s+([A-Za-z]+)\s+(\d+)(?:,\s*(\d{4}))?\.?$/i,
+      (_m, month, day, year) => `将于 ${year ? `${year}年` : ''}${MONTH_NAMES[month.toLowerCase()] || month}${day}日 下线。`
     ]
   ];
 
