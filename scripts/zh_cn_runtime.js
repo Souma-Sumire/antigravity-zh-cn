@@ -913,6 +913,14 @@
     "Error Details": "错误详情",
     "An error was thrown.": "抛出了一个错误。",
     "Allow reading this URL?": "是否允许读取此 URL？",
+    "Allow the browser agent to download a file?": "是否允许浏览器 Agent 下载文件？",
+    "Allow browser downloads from this site?": "是否允许从此站点进行浏览器下载？",
+    "Save rule to always allow browser downloads from this site?": "是否保存规则，始终允许从此站点进行浏览器下载？",
+    "Waiting for upload approval": "等待上传审批",
+    "Yes, allow this download": "是，允许本次下载",
+    "Yes, allow for this task": "是，在本次任务中允许",
+    "Redirected from": "重定向自",
+    "Save to": "保存至",
     "(tell the agent what to do instead)": "（告诉 Agent 改做什么）",
     "Yes, and always allow": "是，且始终允许",
     "New Scheduled Task": "新建计划任务",
@@ -6764,7 +6772,26 @@
       }
     ],
     [/^Starting\s+(.+)$/, '正在启动 $1'],
-    [/^Started\s+(.+)$/, '已启动 $1']
+    [/^Started\s+(.+)$/, '已启动 $1'],
+    [
+      /^Allow upload\s+(.+?)\s+to\s+(.+?)\??$/i,
+      (_m, what, target) => {
+        const normalizedWhat = what.trim().replace(/^(\d+)\s+files?$/i, '$1 个文件');
+        return `是否允许将 ${normalizedWhat} 上传至 ${target.trim()}？`;
+      }
+    ],
+    [
+      /^Save rule to always allow upload\s+(.+?)\s+to\s+(.+?)\??$/i,
+      (_m, what, target) => {
+        const normalizedWhat = what.trim().replace(/^(\d+)\s+files?$/i, '$1 个文件');
+        return `是否保存规则，始终允许将 ${normalizedWhat} 上传至 ${target.trim()}？`;
+      }
+    ],
+    [
+      /^Files?:\s*(.+?)\s+To:\s*(.+)$/i,
+      (_m, files, to) => `文件：${files.trim()} · 目标：${to.trim()}`
+    ],
+    [/^Open Subagent:\s*(.+)$/i, '打开子 Agent：$1']
   ];
 
   const MONTH_NAMES = {
