@@ -6929,8 +6929,9 @@
     '.terminal',
     '[data-testid="terminal-container"]',
     '[data-testid="terminal-view"]',
-    '#agy-zh-cn-sidebar-btn',
-    '#agy-zh-cn-context-menu'
+    '#agy-zh-cn-settings-nav-item',
+    '#agy-zh-cn-settings-panel',
+    '#agy-zh-cn-settings-btn-dot'
   ].join(', ');
 
   const SKIP_CLOSEST_SELECTOR = [
@@ -7080,11 +7081,24 @@
     return Boolean(el.closest(MARKDOWN_PROTECTED_ANCESTOR));
   }
 
+  function isOwnPluginUiElement(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const id = el.id;
+    return (
+      id === 'agy-zh-cn-settings-nav-item' ||
+      id === 'agy-zh-cn-settings-nav-btn' ||
+      id === 'agy-zh-cn-settings-panel' ||
+      id === 'agy-zh-cn-settings-btn-dot' ||
+      id === 'agy-zh-cn-sidebar-btn' ||
+      id === 'agy-zh-cn-context-menu'
+    );
+  }
+
   function shouldSkipElement(el, options) {
     if (!el || el.nodeType !== 1) return true;
     const allowFormAttr = Boolean(options && (options.allowInputAttr || options.allowTextareaAttr) && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT'));
     if (SKIP_TAGS.has(el.tagName) && !(allowFormAttr && el.tagName === 'TEXTAREA')) return true;
-    if (el.id === 'agy-zh-cn-sidebar-btn' || el.id === 'agy-zh-cn-context-menu') return true;
+    if (isOwnPluginUiElement(el)) return true;
     if (
       el.isContentEditable ||
       el.getAttribute('contenteditable') === 'true' ||
@@ -7379,7 +7393,7 @@
   }
 
   function processAttributes(el, options) {
-    if (!el || el.nodeType !== 1 || el.id === 'agy-zh-cn-sidebar-btn' || el.id === 'agy-zh-cn-context-menu') return;
+    if (!el || el.nodeType !== 1 || isOwnPluginUiElement(el)) return;
     if (!el.hasAttribute('placeholder') && !el.hasAttribute('title') && !el.hasAttribute('aria-label')) return;
     if (!(options && options.skipChecked) && shouldSkipElement(el, { allowInputAttr: true })) return;
     for (let i = 0; i < ATTR_LIST.length; i++) {
@@ -7504,7 +7518,7 @@
     };
 
     const visitElement = (el, inToast, inToolbar, inCommentUi, inMarkdownRoot, inProtectedMd, inConvRow) => {
-      if (el.id === 'agy-zh-cn-sidebar-btn' || el.id === 'agy-zh-cn-context-menu') return;
+      if (isOwnPluginUiElement(el)) return;
       const tag = el.tagName;
       if (tag === 'TEXTAREA' || tag === 'INPUT') {
         processAttributes(el);
@@ -7739,7 +7753,7 @@
       guard++;
       const { node: cur, depth } = queue.shift();
       if (!cur || !cur.isConnected) continue;
-      if (cur.nodeType === 1 && cur.id !== 'agy-zh-cn-sidebar-btn' && cur.id !== 'agy-zh-cn-context-menu') {
+      if (cur.nodeType === 1 && !isOwnPluginUiElement(cur)) {
         if (depth < 4 && cur.children && cur.children.length > 0) {
           if (cur !== document.body && shouldSkipElement(cur)) {
             translateCommentUiRoots(cur);
@@ -8021,9 +8035,18 @@
     }
   }
 
-  function refreshContextMenuIfOpen() {
-    if (contextMenuEl && document.body.contains(contextMenuEl)) {
-      showContextMenu();
+  const SETTINGS_UI_VERSION = '10';
+  const SETTINGS_NAV_ITEM_ID = 'agy-zh-cn-settings-nav-item';
+  const SETTINGS_NAV_BTN_ID = 'agy-zh-cn-settings-nav-btn';
+  const SETTINGS_PANEL_ID = 'agy-zh-cn-settings-panel';
+  const SETTINGS_BTN_DOT_ID = 'agy-zh-cn-settings-btn-dot';
+
+  let isLanguageTabActive = false;
+
+  function refreshLanguageSettingsPanelIfOpen() {
+    updateToggleBadge();
+    if (isLanguageTabActive) {
+      renderLanguageSettingsPanel();
     }
   }
 
@@ -8039,7 +8062,7 @@
     updateState.requestId = requestId;
     updateState.error = '';
     updateState.status = action === 'update' ? 'updating' : 'checking';
-    refreshContextMenuIfOpen();
+    refreshLanguageSettingsPanelIfOpen();
 
     const timeoutMs = action === 'update' ? 45000 : 15000;
     updateState.timerId = setTimeout(() => {
@@ -8047,7 +8070,7 @@
       if (updateState.status === 'checking' || updateState.status === 'updating') {
         updateState.status = 'error';
         updateState.error = '未收到主进程响应，请确认已安装启动 Hook 并重启应用';
-        refreshContextMenuIfOpen();
+        refreshLanguageSettingsPanelIfOpen();
       }
     }, timeoutMs);
 
@@ -8074,8 +8097,7 @@
         updateState.status = 'error';
         updateState.error = payload.error || '检查更新失败';
       }
-      updateToggleBadge();
-      refreshContextMenuIfOpen();
+      refreshLanguageSettingsPanelIfOpen();
       return;
     }
 
@@ -8086,505 +8108,175 @@
         updateState.latestHash = updateState.currentHash;
         updateState.restartRequired = Boolean(payload.restartRequired);
         updateState.error = '';
-        updateToggleBadge();
-        showContextMenu();
+        refreshLanguageSettingsPanelIfOpen();
       } else {
         updateState.status = 'error';
         updateState.error = payload.error || '更新失败';
-        updateToggleBadge();
-        refreshContextMenuIfOpen();
+        refreshLanguageSettingsPanelIfOpen();
       }
     }
   }
-
-  let contextMenuEl = null;
 
   function hideContextMenu() {
     const el = document.getElementById('agy-zh-cn-context-menu');
     if (el && el.parentNode) {
       el.parentNode.removeChild(el);
     }
-    contextMenuEl = null;
   }
 
   function ensureZhCnStyles() {
     if (typeof document === 'undefined' || !document.head) return;
     const styleId = 'agy-zh-cn-style';
     let styleEl = document.getElementById(styleId);
-    if (styleEl && styleEl.getAttribute('data-ver') === SIDEBAR_UI_VERSION) return;
+    if (styleEl && styleEl.getAttribute('data-ver') === SETTINGS_UI_VERSION) return;
     if (!styleEl) {
       styleEl = document.createElement('style');
       styleEl.id = styleId;
       document.head.appendChild(styleEl);
     }
-    styleEl.setAttribute('data-ver', SIDEBAR_UI_VERSION);
+    styleEl.setAttribute('data-ver', SETTINGS_UI_VERSION);
     styleEl.textContent = `
-      #agy-zh-cn-sidebar-btn {
-        position: relative;
+      .agy-zh-update-dot {
+        display: none;
+        width: 6px;
+        height: 6px;
+        border-radius: 9999px;
+        background: var(--primary, #2563eb);
+        flex-shrink: 0;
       }
-      #agy-zh-cn-sidebar-btn:hover {
-        background-color: var(--sidebar-muted, color-mix(in srgb, var(--foreground, #888) 6%, transparent));
+      .agy-zh-seg {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px;
+        border-radius: 8px;
+        background: var(--secondary, color-mix(in srgb, var(--foreground, #888) 7%, transparent));
+        border: 1px solid color-mix(in srgb, var(--foreground, #888) 10%, transparent);
+        gap: 2px;
       }
-      #agy-zh-cn-context-menu {
-        position: fixed;
-        width: 268px;
-        background: var(--card, var(--background, #ffffff));
-        color: var(--foreground, #0a0a0c);
-        border: 1px solid color-mix(in srgb, var(--foreground, #888) 12%, transparent);
-        border-radius: 12px;
-        box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.22), 0 4px 12px -2px rgba(0, 0, 0, 0.1);
-        z-index: 999999;
+      .agy-zh-seg-btn {
+        border: none;
+        background: transparent;
+        color: var(--muted-foreground, #71717a);
         font-family: inherit;
-        overflow: hidden;
-        animation: agyZhPopoverIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-        user-select: none;
-        pointer-events: auto;
-      }
-      @keyframes agyZhPopoverIn {
-        from { opacity: 0; transform: translateY(6px) scale(0.98); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
-      }
-      .agy-zh-header {
-        padding: 10px 14px;
-        border-bottom: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-      .agy-zh-title {
         font-size: 13px;
-        font-weight: 600;
-        color: var(--foreground, #0a0a0c);
-      }
-      .agy-zh-option-row + .agy-zh-option-row {
-        border-top: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
-      }
-      .agy-zh-option-row {
-        padding: 11px 14px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
-      .agy-zh-option-label {
-        font-size: 12px;
         font-weight: 500;
+        line-height: 1.25;
+        padding: 5px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .agy-zh-seg-btn:hover:not(.active) {
         color: var(--foreground, #0a0a0c);
+      }
+      .agy-zh-seg-btn.active {
+        background: var(--background, #ffffff);
+        color: var(--foreground, #0a0a0c);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
       }
       .agy-zh-switch {
         position: relative;
-        width: 28px;
-        height: 16px;
-        padding: 0;
-        border-radius: 9999px;
-        border: 1px solid color-mix(in srgb, var(--foreground, #888) 25%, transparent);
-        background: color-mix(in srgb, var(--foreground, #888) 12%, transparent);
-        cursor: pointer;
-        flex-shrink: 0;
-        transition: background-color 0.15s ease, border-color 0.15s ease;
-      }
-      .agy-zh-switch.on {
-        background: var(--primary, #2f75c3);
-        border-color: var(--primary, #2f75c3);
-      }
-      .agy-zh-switch-knob {
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 10px;
-        height: 10px;
-        border-radius: 9999px;
-        background: #ffffff;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-        transition: transform 0.15s ease;
-      }
-      .agy-zh-switch.on .agy-zh-switch-knob {
-        transform: translateX(12px);
-      }
-      .agy-zh-lang-switch-group {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-      }
-      .agy-zh-lang-opt {
-        background: none;
-        border: none;
+        width: 44px;
+        height: 24px;
         padding: 0;
-        margin: 0;
-        font-family: inherit;
-        font-size: 12px;
-        font-weight: 400;
-        color: var(--muted-foreground, #71717a);
+        border-radius: 9999px;
+        border: none;
+        background: var(--secondary, color-mix(in srgb, var(--foreground, #888) 18%, transparent));
         cursor: pointer;
-        transition: color 0.15s ease;
+        flex-shrink: 0;
+        transition: background-color 0.2s ease;
       }
-      .agy-zh-lang-opt.active {
-        color: var(--foreground, #0a0a0c);
-        font-weight: 600;
+      .agy-zh-switch.on {
+        background: var(--primary, #2563eb);
       }
-      .agy-zh-switch.lang-track {
-        background: color-mix(in srgb, var(--foreground, #888) 18%, transparent);
-        border-color: color-mix(in srgb, var(--foreground, #888) 28%, transparent);
+      .agy-zh-switch-knob {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border-radius: 9999px;
+        background: #ffffff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+        transform: translateX(4px);
+        transition: transform 0.2s ease;
       }
-      .agy-zh-switch.lang-track.on {
-        background: var(--primary, #2f75c3);
-        border-color: var(--primary, #2f75c3);
+      .agy-zh-switch.on .agy-zh-switch-knob {
+        transform: translateX(24px);
       }
-      .agy-zh-footer {
-        padding: 8px;
-        border-top: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .agy-zh-status {
-        font-size: 11px;
-        color: var(--muted-foreground, #71717a);
-        padding: 2px 6px;
-        border-left: 2px solid color-mix(in srgb, var(--foreground, #888) 28%, transparent);
-        margin: 0 2px;
-        word-break: break-word;
-      }
-      .agy-zh-footer-actions {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .agy-zh-footer-btn {
-        flex: 1;
-        display: flex;
+      .agy-zh-btn {
+        display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 6px;
-        padding: 6px 8px;
-        border-radius: 7px;
-        background: var(--secondary, color-mix(in srgb, var(--foreground, #888) 6%, transparent));
-        border: 1px solid color-mix(in srgb, var(--foreground, #888) 8%, transparent);
+        padding: 6px 12px;
+        border-radius: 8px;
+        background: var(--secondary, color-mix(in srgb, var(--foreground, #888) 7%, transparent));
+        border: 1px solid color-mix(in srgb, var(--foreground, #888) 12%, transparent);
         color: var(--foreground, #0a0a0c);
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 500;
         font-family: inherit;
         cursor: pointer;
+        white-space: nowrap;
         transition: background-color 0.15s ease;
       }
-      .agy-zh-footer-btn:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--foreground, #888) 11%, transparent);
+      .agy-zh-btn:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--foreground, #888) 12%, transparent);
       }
-      .agy-zh-footer-btn:disabled {
+      .agy-zh-btn:disabled {
         opacity: 0.6;
         cursor: default;
       }
       .agy-zh-primary-btn {
-        flex: 1;
-        display: flex;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 6px 8px;
-        border-radius: 7px;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 8px;
         border: none;
-        background: var(--primary, #2f75c3);
+        background: var(--primary, #2563eb);
         color: var(--primary-foreground, #ffffff);
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 500;
         font-family: inherit;
         cursor: pointer;
+        white-space: nowrap;
         transition: filter 0.15s ease;
       }
-      .agy-zh-primary-btn:hover {
+      .agy-zh-primary-btn:hover:not(:disabled) {
         filter: brightness(1.08);
+      }
+      .agy-zh-primary-btn:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .agy-zh-update-status-inline {
+        margin-top: 6px;
+        padding-left: 8px;
+        border-left: 2px solid color-mix(in srgb, var(--foreground, #888) 28%, transparent);
+        font-size: 12px;
+        color: var(--muted-foreground, #71717a);
+        word-break: break-word;
       }
     `;
   }
 
-  function showContextMenu() {
-    hideContextMenu();
-    ensureZhCnStyles();
+  const NAV_BTN_BASE_CLASS =
+    'flex items-center gap-1.5 w-full px-2 py-1 rounded-lg cursor-pointer border-none text-left transition-all outline-none';
+  const NAV_BTN_ACTIVE_CLASS = NAV_BTN_BASE_CLASS + ' bg-sidebar-secondary';
+  const NAV_BTN_INACTIVE_CLASS = NAV_BTN_BASE_CLASS + ' hover:bg-sidebar-muted';
+  const NAV_SPAN_ACTIVE_CLASS = 'transition-colors select-none truncate flex-1 text-foreground';
+  const NAV_SPAN_INACTIVE_CLASS =
+    'transition-colors select-none truncate flex-1 text-secondary-foreground group-hover/nav-item:text-foreground';
 
-    const anchorBtn = document.getElementById('agy-zh-cn-sidebar-btn');
-    let posLeft = '12px';
-    let posBottom = '52px';
-    if (anchorBtn && typeof anchorBtn.getBoundingClientRect === 'function') {
-      const rect = anchorBtn.getBoundingClientRect();
-      if (rect && rect.width > 0 && rect.height > 0) {
-        const clampedLeft = Math.min(Math.max(8, Math.round(rect.left)), Math.max(8, window.innerWidth - 276));
-        posLeft = `${clampedLeft}px`;
-        posBottom = `${Math.max(8, Math.round(window.innerHeight - rect.top + 8))}px`;
-      }
+  function cleanupLegacySidebarUi() {
+    const legacyIds = ['agy-zh-cn-sidebar-btn', 'agy-zh-cn-context-menu', 'agy-zh-cn-toggle-bar'];
+    for (let i = 0; i < legacyIds.length; i++) {
+      const el = document.getElementById(legacyIds[i]);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
     }
-
-    const menu = document.createElement('div');
-    menu.id = 'agy-zh-cn-context-menu';
-    menu.setAttribute('translate', 'no');
-    menu.setAttribute('data-plugin-id', 'zh-cn-ui');
-    menu.setAttribute('data-external-plugin', 'true');
-    menu.style.bottom = posBottom;
-    menu.style.left = posLeft;
-
-    // 1. 头部（无右上角杂项）
-    const header = document.createElement('div');
-    header.className = 'agy-zh-header';
-
-    const titleEl = document.createElement('span');
-    titleEl.className = 'agy-zh-title';
-    titleEl.textContent = '界面设置';
-
-    header.appendChild(titleEl);
-    menu.appendChild(header);
-
-    // 2. 左 English · 中开关 · 右 中文 + 联网翻译会话标题 Switch
-    const langRow = document.createElement('div');
-    langRow.className = 'agy-zh-option-row';
-
-    const langTitle = document.createElement('span');
-    langTitle.className = 'agy-zh-option-label';
-    langTitle.textContent = '界面语言';
-
-    const langGroup = document.createElement('div');
-    langGroup.className = 'agy-zh-lang-switch-group';
-
-    const enOpt = document.createElement('button');
-    enOpt.type = 'button';
-    enOpt.textContent = 'English';
-
-    const langSw = document.createElement('button');
-    langSw.type = 'button';
-    langSw.setAttribute('role', 'switch');
-    const langKnob = document.createElement('span');
-    langKnob.className = 'agy-zh-switch-knob';
-    langSw.appendChild(langKnob);
-
-    const zhOpt = document.createElement('button');
-    zhOpt.type = 'button';
-    zhOpt.textContent = '中文';
-
-    const syncLangSwitchVisual = (isZh) => {
-      enOpt.className = `agy-zh-lang-opt${!isZh ? ' active' : ''}`;
-      zhOpt.className = `agy-zh-lang-opt${isZh ? ' active' : ''}`;
-      langSw.className = `agy-zh-switch lang-track${isZh ? ' on' : ''}`;
-      langSw.setAttribute('aria-checked', isZh ? 'true' : 'false');
-    };
-
-    const applyLangSwitch = (targetLang) => {
-      const i18n = window.__AGY_I18N__;
-      const cur = i18n ? i18n.getLanguage() : currentLang;
-      if (cur === targetLang) return;
-      syncLangSwitchVisual(targetLang === 'zh-CN');
-      if (i18n) i18n.setLanguage(targetLang);
-      else setLanguage(targetLang);
-    };
-
-    syncLangSwitchVisual((window.__AGY_I18N__ ? window.__AGY_I18N__.getLanguage() : currentLang) === 'zh-CN');
-
-    enOpt.addEventListener('click', (e) => {
-      e.stopPropagation();
-      applyLangSwitch('en-US');
-    });
-    zhOpt.addEventListener('click', (e) => {
-      e.stopPropagation();
-      applyLangSwitch('zh-CN');
-    });
-    langSw.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const i18n = window.__AGY_I18N__;
-      const cur = i18n ? i18n.getLanguage() : currentLang;
-      applyLangSwitch(cur === 'zh-CN' ? 'en-US' : 'zh-CN');
-    });
-
-    langGroup.appendChild(enOpt);
-    langGroup.appendChild(langSw);
-    langGroup.appendChild(zhOpt);
-    langRow.appendChild(langTitle);
-    langRow.appendChild(langGroup);
-    menu.appendChild(langRow);
-
-    const createSwitchRow = (labelText, getChecked, onToggle) => {
-      const row = document.createElement('div');
-      row.className = 'agy-zh-option-row';
-
-      const lbl = document.createElement('span');
-      lbl.className = 'agy-zh-option-label';
-      lbl.textContent = labelText;
-
-      const sw = document.createElement('button');
-      sw.type = 'button';
-      sw.setAttribute('role', 'switch');
-      const syncVisual = (val) => {
-        sw.className = `agy-zh-switch${val ? ' on' : ''}`;
-        sw.setAttribute('aria-checked', val ? 'true' : 'false');
-      };
-      syncVisual(getChecked());
-
-      const knob = document.createElement('span');
-      knob.className = 'agy-zh-switch-knob';
-      sw.appendChild(knob);
-
-      sw.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const nextVal = onToggle();
-        syncVisual(Boolean(nextVal));
-      });
-
-      row.appendChild(lbl);
-      row.appendChild(sw);
-      return row;
-    };
-
-    menu.appendChild(
-      createSwitchRow(
-        '联网翻译会话标题',
-        () => isTitleTranslationEnabled(),
-        () => {
-          const next = !isTitleTranslationEnabled();
-          setTitleTranslationEnabled(next);
-          return next;
-        }
-      )
-    );
-
-    // 4. 底部更新区
-    const footer = document.createElement('div');
-    footer.className = 'agy-zh-footer';
-
-    let statusEl = null;
-    const isBusy = updateState.status === 'checking' || updateState.status === 'updating';
-    if (updateState.status !== 'idle') {
-      const statusTextMap = {
-        checking: '正在检查远程更新...',
-        latest: '当前已是最新版本',
-        available: updateState.latestHash ? `发现可用更新 #${updateState.latestHash}` : '发现可用更新',
-        updating: '正在拉取并应用更新...',
-        updated: updateState.restartRequired ? '更新完成，请重启 Antigravity 生效' : '界面翻译已热更新生效',
-        error: updateState.error || '检查更新失败，请重试'
-      };
-      statusEl = document.createElement('div');
-      statusEl.className = 'agy-zh-status';
-      if (updateState.status === 'available') {
-        statusEl.style.borderLeftColor = 'var(--primary, #2f75c3)';
-      } else if (updateState.status === 'updated') {
-        statusEl.style.borderLeftColor = '#16a34a';
-      } else if (updateState.status === 'error') {
-        statusEl.style.borderLeftColor = '#dc2626';
-      }
-      statusEl.textContent = statusTextMap[updateState.status] || '';
-      footer.appendChild(statusEl);
-    }
-
-    const actions = document.createElement('div');
-    actions.className = 'agy-zh-footer-actions';
-
-    if (updateState.status === 'available') {
-      const actionBtn = document.createElement('button');
-      actionBtn.type = 'button';
-      actionBtn.className = 'agy-zh-primary-btn';
-      actionBtn.textContent = '立即更新';
-      actionBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        sendUpdateAction('update');
-      });
-      actions.appendChild(actionBtn);
-    } else if (updateState.status === 'updated' && updateState.restartRequired) {
-      const restartBtn = document.createElement('button');
-      restartBtn.type = 'button';
-      restartBtn.className = 'agy-zh-primary-btn';
-      restartBtn.textContent = '立即重启';
-      restartBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (restartBtn.disabled) return;
-        restartBtn.disabled = true;
-        restartBtn.textContent = '正在重启...';
-        sendUpdateAction('restart');
-        setTimeout(() => {
-          if (state.instanceId !== instanceId) return;
-          restartBtn.disabled = false;
-          restartBtn.textContent = '立即重启';
-          if (statusEl && statusEl.isConnected) {
-            statusEl.style.borderLeftColor = '#d97706';
-            statusEl.textContent = '未能自动重启（主进程 Hook 尚未重载），请手动重启 Antigravity';
-          }
-        }, 3000);
-      });
-      actions.appendChild(restartBtn);
-    } else {
-      const checkBtn = document.createElement('button');
-      checkBtn.type = 'button';
-      checkBtn.className = 'agy-zh-footer-btn';
-      checkBtn.disabled = isBusy;
-      checkBtn.textContent = isBusy ? '处理中...' : '检查更新';
-      checkBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        sendUpdateAction('check');
-      });
-      actions.appendChild(checkBtn);
-    }
-
-    footer.appendChild(actions);
-    menu.appendChild(footer);
-
-    menu.addEventListener('pointerdown', (e) => e.stopPropagation());
-    menu.addEventListener('mousedown', (e) => e.stopPropagation());
-    menu.addEventListener('click', (e) => e.stopPropagation());
-    menu.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    });
-
-    document.body.appendChild(menu);
-    contextMenuEl = menu;
-  }
-
-  function updateToggleBadge() {
-    const btn = document.getElementById('agy-zh-cn-sidebar-btn');
-    if (!btn) return;
-    const nextLabel = currentLang === 'zh-CN' ? '简体中文' : 'English';
-    const labelEl = btn.querySelector('.agy-zh-cn-sidebar-label');
-    if (labelEl && labelEl.textContent !== nextLabel) {
-      labelEl.textContent = nextLabel;
-    }
-    const nextDotDisplay = updateState.status === 'available' ? 'inline-block' : 'none';
-    const dotEl = btn.querySelector('.agy-zh-cn-update-dot');
-    if (dotEl && dotEl.style.display !== nextDotDisplay) {
-      dotEl.style.display = nextDotDisplay;
-    }
-    if (btn.hasAttribute('title')) {
-      btn.removeAttribute('title');
-    }
-  }
-
-  function getSidebarAnchorTarget(settingsBtn) {
-    const accountBtn = document.getElementById('agy-account-manager-btn');
-    if (accountBtn && accountBtn.parentElement === settingsBtn.parentElement) {
-      return accountBtn;
-    }
-    return settingsBtn;
-  }
-
-  function getNormalizedSidebarBtnClass(settingsBtn) {
-    const raw = typeof settingsBtn.className === 'string' ? settingsBtn.className : '';
-    return raw
-      .split(/\s+/)
-      .filter((cls) => cls && !/^(?:bg-(?:accent|muted|secondary|sidebar-accent|sidebar-muted)(?:\/\d+)?|active)$/.test(cls))
-      .join(' ');
-  }
-
-  function ensureOutsideHandlers() {
-    const closeMenu = () => {
-      const i18n = window.__AGY_I18N__;
-      if (i18n && i18n.hideContextMenu) i18n.hideContextMenu();
-      else hideContextMenu();
-    };
-
-    const handleOutsideInteraction = (e) => {
-      if (!document.getElementById('agy-zh-cn-context-menu')) return;
-      const target = e.target;
-      if (target && typeof target.closest === 'function') {
-        if (target.closest('#agy-zh-cn-context-menu') || target.closest('#agy-zh-cn-sidebar-btn')) {
-          return;
-        }
-      }
-      closeMenu();
-    };
-
     if (window.__agyOutsideHandler) {
       window.removeEventListener('pointerdown', window.__agyOutsideHandler, true);
       window.removeEventListener('mousedown', window.__agyOutsideHandler, true);
@@ -8592,29 +8284,531 @@
       document.removeEventListener('pointerdown', window.__agyOutsideHandler, true);
       document.removeEventListener('mousedown', window.__agyOutsideHandler, true);
       document.removeEventListener('click', window.__agyOutsideHandler, true);
+      window.__agyOutsideHandler = null;
     }
-    window.__agyOutsideHandler = handleOutsideInteraction;
-    window.addEventListener('pointerdown', handleOutsideInteraction, true);
-    window.addEventListener('mousedown', handleOutsideInteraction, true);
-    window.addEventListener('click', handleOutsideInteraction, true);
-
     if (window.__agyKeyHandler) {
       window.removeEventListener('keydown', window.__agyKeyHandler, true);
       document.removeEventListener('keydown', window.__agyKeyHandler, true);
+      window.__agyKeyHandler = null;
     }
-    window.__agyKeyHandler = (e) => {
-      if (e.key === 'Escape') closeMenu();
-    };
-    window.addEventListener('keydown', window.__agyKeyHandler, true);
-
     if (window.__agyBlurHandler) {
       window.removeEventListener('blur', window.__agyBlurHandler);
+      window.__agyBlurHandler = null;
     }
-    window.__agyBlurHandler = closeMenu;
-    window.addEventListener('blur', window.__agyBlurHandler);
   }
 
-  const SIDEBAR_UI_VERSION = '9';
+  function resolveSettingsDom() {
+    const sidebar = document.querySelector('[data-testid="settings-sidebar"]');
+    if (!sidebar) {
+      isLanguageTabActive = false;
+      return null;
+    }
+
+    let browserBtn = sidebar.querySelector('button[data-testid="settings-nav-item-Browser"]');
+    if (!browserBtn) {
+      const btns = sidebar.querySelectorAll('button');
+      for (let i = 0; i < btns.length; i++) {
+        const t = (btns[i].textContent || '').trim();
+        if (t === '浏览器' || t === 'Browser') {
+          browserBtn = btns[i];
+          break;
+        }
+      }
+    }
+    if (!browserBtn) {
+      const generalBtn = sidebar.querySelector('button[data-testid="settings-nav-item-General"]');
+      if (generalBtn && generalBtn.parentElement && generalBtn.parentElement.parentElement) {
+        const group = generalBtn.parentElement.parentElement;
+        const lastWrap = group.lastElementChild;
+        browserBtn = lastWrap ? lastWrap.querySelector('button') : null;
+      }
+    }
+    if (!browserBtn || !browserBtn.parentElement || !browserBtn.parentElement.parentElement) {
+      return null;
+    }
+
+    const browserWrap = browserBtn.parentElement;
+    const navGroup = browserWrap.parentElement;
+
+    let rightContentHost = null;
+    let cur = sidebar;
+    for (let depth = 0; depth < 6 && cur && cur.parentElement; depth++) {
+      const parent = cur.parentElement;
+      if (parent.children && parent.children.length >= 2) {
+        for (let i = 0; i < parent.children.length; i++) {
+          const sibling = parent.children[i];
+          if (sibling === cur) continue;
+          const host =
+            sibling.querySelector('.grow.w-full') ||
+            sibling.querySelector('[data-split-fill-edge] .grow');
+          if (host) {
+            rightContentHost = host;
+            break;
+          }
+        }
+        if (rightContentHost) break;
+      }
+      cur = parent;
+    }
+
+    return { sidebar, browserWrap, navGroup, rightContentHost };
+  }
+
+  function restoreNativeSettingsPaneState(dom) {
+    if (!dom) return;
+    if (dom.rightContentHost) {
+      const children = dom.rightContentHost.children;
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (child.id === SETTINGS_PANEL_ID) continue;
+        if (child.getAttribute('data-agy-hidden-pane') === '1') {
+          child.style.display = child.getAttribute('data-agy-orig-display') || '';
+          child.removeAttribute('data-agy-hidden-pane');
+          child.removeAttribute('data-agy-orig-display');
+        }
+      }
+    }
+    const prevActiveBtns = dom.sidebar.querySelectorAll('button[data-agy-prev-active="1"]');
+    for (let i = 0; i < prevActiveBtns.length; i++) {
+      const b = prevActiveBtns[i];
+      b.removeAttribute('data-agy-prev-active');
+      b.classList.remove('hover:bg-sidebar-muted');
+      b.classList.add('bg-sidebar-secondary');
+      const sp = b.querySelector('[data-agy-prev-active-span="1"]');
+      if (sp) {
+        sp.removeAttribute('data-agy-prev-active-span');
+        sp.className = NAV_SPAN_ACTIVE_CLASS;
+      }
+    }
+  }
+
+  function setNavItemActiveVisual(active) {
+    const btn = document.getElementById(SETTINGS_NAV_BTN_ID);
+    if (!btn) return;
+    btn.className = active ? NAV_BTN_ACTIVE_CLASS : NAV_BTN_INACTIVE_CLASS;
+    const labelEl = btn.querySelector('.agy-zh-settings-nav-label');
+    if (labelEl) {
+      labelEl.className = 'agy-zh-settings-nav-label ' + (active ? NAV_SPAN_ACTIVE_CLASS : NAV_SPAN_INACTIVE_CLASS);
+    }
+  }
+
+  function deactivateLanguageSettings() {
+    if (!isLanguageTabActive) return;
+    isLanguageTabActive = false;
+    const panel = document.getElementById(SETTINGS_PANEL_ID);
+    if (panel) {
+      panel.style.display = 'none';
+    }
+    const dom = resolveSettingsDom();
+    if (dom) {
+      restoreNativeSettingsPaneState(dom);
+    }
+    setNavItemActiveVisual(false);
+  }
+
+  function renderLanguageSettingsPanel() {
+    const dom = resolveSettingsDom();
+    if (!dom || !dom.rightContentHost) return;
+    ensureZhCnStyles();
+
+    let panel = document.getElementById(SETTINGS_PANEL_ID);
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = SETTINGS_PANEL_ID;
+      panel.setAttribute('translate', 'no');
+      panel.setAttribute('data-plugin-id', 'zh-cn-ui');
+      panel.setAttribute('data-external-plugin', 'true');
+      dom.rightContentHost.appendChild(panel);
+    } else if (panel.parentElement !== dom.rightContentHost) {
+      dom.rightContentHost.appendChild(panel);
+    }
+
+    const isZh = currentLang === 'zh-CN';
+    const isTitleTrans = isTitleTranslationEnabled();
+    const isBusy = updateState.status === 'checking' || updateState.status === 'updating';
+
+    const copy = isZh
+      ? {
+          title: '语言',
+          subtitle: '配置界面显示语言、会话标题翻译与语言包更新。',
+          sectionGeneral: '界面与翻译',
+          langLabel: '界面语言',
+          langDesc: '在简体中文与 English 之间即时切换，无需重启应用。',
+          titleTransLabel: '联网翻译会话标题',
+          titleTransDesc: '开启后自动翻译侧边栏英文会话标题，并在本地缓存翻译结果。',
+          sectionUpdate: '语言包更新',
+          packLabel: '简体中文语言包',
+          packDescIdle: updateState.currentHash
+            ? `当前版本 #${updateState.currentHash}，可检查并获取最新社区翻译更新。`
+            : '检查并获取最新社区简体中文翻译更新。',
+          statusChecking: '正在检查远程更新...',
+          statusLatest: updateState.currentHash
+            ? `当前已是最新版本 (#${updateState.currentHash})`
+            : '当前已是最新版本',
+          statusAvailable: updateState.latestHash ? `发现可用更新 #${updateState.latestHash}` : '发现可用更新',
+          statusUpdating: '正在拉取并应用更新...',
+          statusUpdatedRestart: '更新完成，请重启 Antigravity 生效',
+          statusUpdatedHot: '界面翻译已热更新生效',
+          statusErrorFallback: '检查更新失败，请重试',
+          btnCheck: '检查更新',
+          btnBusy: '处理中...',
+          btnUpdate: '立即更新',
+          btnRestart: '立即重启',
+          btnRestarting: '正在重启...',
+          restartFallback: '未能自动重启（主进程 Hook 尚未重载），请手动重启 Antigravity'
+        }
+      : {
+          title: 'Language',
+          subtitle: 'Configure interface language, conversation title translation, and language pack updates.',
+          sectionGeneral: 'Interface & Translation',
+          langLabel: 'Interface Language',
+          langDesc: 'Switch between Simplified Chinese and English immediately without restarting.',
+          titleTransLabel: 'Translate Conversation Titles',
+          titleTransDesc: 'Automatically translate English conversation titles in the sidebar and cache them locally.',
+          sectionUpdate: 'Language Pack Updates',
+          packLabel: 'Simplified Chinese Language Pack',
+          packDescIdle: updateState.currentHash
+            ? `Current build #${updateState.currentHash}. Check for the latest community translation updates.`
+            : 'Check for and install the latest community Chinese localization updates.',
+          statusChecking: 'Checking for updates...',
+          statusLatest: updateState.currentHash
+            ? `You are up to date (#${updateState.currentHash})`
+            : 'You are up to date.',
+          statusAvailable: updateState.latestHash
+            ? `Update available (#${updateState.latestHash})`
+            : 'Update available',
+          statusUpdating: 'Downloading and applying update...',
+          statusUpdatedRestart: 'Update installed. Restart Antigravity to apply.',
+          statusUpdatedHot: 'Localization updated and applied.',
+          statusErrorFallback: 'Update check failed. Please try again.',
+          btnCheck: 'Check for Updates',
+          btnBusy: 'Working...',
+          btnUpdate: 'Update Now',
+          btnRestart: 'Restart Now',
+          btnRestarting: 'Restarting...',
+          restartFallback: 'Auto-restart unavailable. Please restart Antigravity manually.'
+        };
+
+    panel.innerHTML = '';
+    panel.style.display = isLanguageTabActive ? '' : 'none';
+
+    const scrollWrap = document.createElement('div');
+    scrollWrap.className = 'w-full bg-transparent h-full overflow-y-auto';
+
+    const container = document.createElement('div');
+    container.className = 'p-6 flex flex-col gap-4 w-full max-w-2xl mx-auto';
+
+    // 页头
+    const headerWrap = document.createElement('div');
+    headerWrap.className = 'flex flex-col gap-2 w-full mb-2 bg-transparent';
+    const headerRow = document.createElement('div');
+    headerRow.className = 'flex justify-between items-start gap-4 w-full bg-transparent pr-8 lg:pr-0';
+    const headerText = document.createElement('div');
+    headerText.className = 'flex-1 flex flex-col gap-1 min-w-0 bg-transparent';
+
+    const h2 = document.createElement('h2');
+    h2.className = 'text-2xl m-0 font-medium truncate flex-1 text-foreground';
+    h2.textContent = copy.title;
+
+    const sub = document.createElement('div');
+    sub.className = 'text-muted-foreground bg-transparent';
+    sub.textContent = copy.subtitle;
+
+    headerText.appendChild(h2);
+    headerText.appendChild(sub);
+    headerRow.appendChild(headerText);
+    headerWrap.appendChild(headerRow);
+    container.appendChild(headerWrap);
+
+    const sectionsWrap = document.createElement('div');
+    sectionsWrap.className = 'flex flex-col gap-8 w-full';
+
+    const createSection = (sectionTitle, rows) => {
+      const sec = document.createElement('div');
+      sec.className = 'space-y-2';
+
+      const secHeader = document.createElement('div');
+      secHeader.className = 'flex flex-col gap-1';
+      const secTitleRow = document.createElement('div');
+      secTitleRow.className = 'flex items-center justify-between';
+      const h3 = document.createElement('h3');
+      h3.className = 'm-0 font-medium text-foreground';
+      h3.textContent = sectionTitle;
+      secTitleRow.appendChild(h3);
+      secHeader.appendChild(secTitleRow);
+      sec.appendChild(secHeader);
+
+      const card = document.createElement('div');
+      card.className = 'agy-card bg-transparent rounded-xl border border-border overflow-hidden divide-y divide-border';
+      for (let i = 0; i < rows.length; i++) {
+        card.appendChild(rows[i]);
+      }
+      sec.appendChild(card);
+      return sec;
+    };
+
+    const createRow = (labelText, descText, controlEl, extraEl) => {
+      const row = document.createElement('div');
+      row.className = 'py-3 px-4 w-full bg-transparent flex justify-between gap-4 items-center';
+
+      const left = document.createElement('div');
+      left.className = 'flex-1 flex flex-col gap-0.5 min-w-0';
+
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'flex items-center gap-1.5 text-foreground font-medium';
+      titleDiv.textContent = labelText;
+      left.appendChild(titleDiv);
+
+      if (descText) {
+        const descSpan = document.createElement('span');
+        descSpan.className = 'text-sm text-muted-foreground whitespace-pre-wrap';
+        descSpan.textContent = descText;
+        left.appendChild(descSpan);
+      }
+
+      if (extraEl) {
+        left.appendChild(extraEl);
+      }
+
+      const right = document.createElement('div');
+      right.className = 'shrink-0';
+      if (controlEl) right.appendChild(controlEl);
+
+      row.appendChild(left);
+      row.appendChild(right);
+      return row;
+    };
+
+    // 行 1：界面语言分段切换
+    const seg = document.createElement('div');
+    seg.className = 'agy-zh-seg';
+
+    const zhBtn = document.createElement('button');
+    zhBtn.type = 'button';
+    zhBtn.className = `agy-zh-seg-btn${isZh ? ' active' : ''}`;
+    zhBtn.textContent = '简体中文';
+    zhBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (currentLang === 'zh-CN') return;
+      const i18n = window.__AGY_I18N__;
+      if (i18n) i18n.setLanguage('zh-CN');
+      else setLanguage('zh-CN');
+    });
+
+    const enBtn = document.createElement('button');
+    enBtn.type = 'button';
+    enBtn.className = `agy-zh-seg-btn${!isZh ? ' active' : ''}`;
+    enBtn.textContent = 'English';
+    enBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (currentLang === 'en-US') return;
+      const i18n = window.__AGY_I18N__;
+      if (i18n) i18n.setLanguage('en-US');
+      else setLanguage('en-US');
+    });
+
+    seg.appendChild(zhBtn);
+    seg.appendChild(enBtn);
+    const langRow = createRow(copy.langLabel, copy.langDesc, seg);
+
+    // 行 2：联网翻译会话标题开关
+    const titleSw = document.createElement('button');
+    titleSw.type = 'button';
+    titleSw.setAttribute('role', 'switch');
+    titleSw.setAttribute('aria-checked', isTitleTrans ? 'true' : 'false');
+    titleSw.className = `agy-zh-switch${isTitleTrans ? ' on' : ''}`;
+    const knob = document.createElement('span');
+    knob.className = 'agy-zh-switch-knob';
+    titleSw.appendChild(knob);
+    titleSw.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const next = !isTitleTranslationEnabled();
+      setTitleTranslationEnabled(next);
+      titleSw.className = `agy-zh-switch${next ? ' on' : ''}`;
+      titleSw.setAttribute('aria-checked', next ? 'true' : 'false');
+    });
+    const titleTransRow = createRow(copy.titleTransLabel, copy.titleTransDesc, titleSw);
+
+    sectionsWrap.appendChild(createSection(copy.sectionGeneral, [langRow, titleTransRow]));
+
+    // 分组 2：语言包更新
+    let statusEl = null;
+    if (updateState.status !== 'idle') {
+      const statusTextMap = {
+        checking: copy.statusChecking,
+        latest: copy.statusLatest,
+        available: copy.statusAvailable,
+        updating: copy.statusUpdating,
+        updated: updateState.restartRequired ? copy.statusUpdatedRestart : copy.statusUpdatedHot,
+        error: updateState.error || copy.statusErrorFallback
+      };
+      statusEl = document.createElement('div');
+      statusEl.className = 'agy-zh-update-status-inline';
+      if (updateState.status === 'available') {
+        statusEl.style.borderLeftColor = 'var(--primary, #2563eb)';
+      } else if (updateState.status === 'updated') {
+        statusEl.style.borderLeftColor = '#16a34a';
+      } else if (updateState.status === 'error') {
+        statusEl.style.borderLeftColor = '#dc2626';
+      }
+      statusEl.textContent = statusTextMap[updateState.status] || '';
+    }
+
+    let actionBtn = null;
+    if (updateState.status === 'available') {
+      actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.className = 'agy-zh-primary-btn';
+      actionBtn.textContent = copy.btnUpdate;
+      actionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sendUpdateAction('update');
+      });
+    } else if (updateState.status === 'updated' && updateState.restartRequired) {
+      actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.className = 'agy-zh-primary-btn';
+      actionBtn.textContent = copy.btnRestart;
+      actionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (actionBtn.disabled) return;
+        actionBtn.disabled = true;
+        actionBtn.textContent = copy.btnRestarting;
+        sendUpdateAction('restart');
+        setTimeout(() => {
+          if (state.instanceId !== instanceId) return;
+          actionBtn.disabled = false;
+          actionBtn.textContent = copy.btnRestart;
+          if (statusEl && statusEl.isConnected) {
+            statusEl.style.borderLeftColor = '#d97706';
+            statusEl.textContent = copy.restartFallback;
+          }
+        }, 3000);
+      });
+    } else {
+      actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.className = 'agy-zh-btn';
+      actionBtn.disabled = isBusy;
+      actionBtn.textContent = isBusy ? copy.btnBusy : copy.btnCheck;
+      actionBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sendUpdateAction('check');
+      });
+    }
+
+    const updateRow = createRow(copy.packLabel, copy.packDescIdle, actionBtn, statusEl);
+    sectionsWrap.appendChild(createSection(copy.sectionUpdate, [updateRow]));
+
+    container.appendChild(sectionsWrap);
+    scrollWrap.appendChild(container);
+    panel.appendChild(scrollWrap);
+  }
+
+  function activateLanguageSettings() {
+    const dom = resolveSettingsDom();
+    if (!dom || !dom.rightContentHost) return;
+
+    if (!isLanguageTabActive) {
+      const navBtns = dom.sidebar.querySelectorAll('button[data-testid^="settings-nav-item-"]');
+      for (let i = 0; i < navBtns.length; i++) {
+        const b = navBtns[i];
+        if (b.id === SETTINGS_NAV_BTN_ID) continue;
+        if (b.classList.contains('bg-sidebar-secondary')) {
+          b.setAttribute('data-agy-prev-active', '1');
+          b.classList.remove('bg-sidebar-secondary');
+          b.classList.add('hover:bg-sidebar-muted');
+          const sp = b.querySelector('span');
+          if (sp && sp.classList.contains('text-foreground')) {
+            sp.setAttribute('data-agy-prev-active-span', '1');
+            sp.className = NAV_SPAN_INACTIVE_CLASS;
+          }
+        }
+      }
+
+      const children = dom.rightContentHost.children;
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (child.id === SETTINGS_PANEL_ID) continue;
+        if (child.style.display !== 'none') {
+          child.setAttribute('data-agy-orig-display', child.style.display || '');
+          child.setAttribute('data-agy-hidden-pane', '1');
+          child.style.display = 'none';
+        }
+      }
+      isLanguageTabActive = true;
+    }
+
+    setNavItemActiveVisual(true);
+    renderLanguageSettingsPanel();
+  }
+
+  function openLanguageSettings() {
+    const dom = resolveSettingsDom();
+    if (dom) {
+      mountToggleBadge();
+      activateLanguageSettings();
+      return;
+    }
+    const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
+    if (!settingsBtn) return;
+    settingsBtn.click();
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries++;
+      const ready = resolveSettingsDom();
+      if (ready) {
+        clearInterval(timer);
+        mountToggleBadge();
+        activateLanguageSettings();
+      } else if (tries > 20) {
+        clearInterval(timer);
+      }
+    }, 50);
+  }
+
+  function showContextMenu() {
+    openLanguageSettings();
+  }
+
+  function updateToggleBadge() {
+    const hasUpdate = updateState.status === 'available';
+    const nextDotDisplay = hasUpdate ? 'inline-block' : 'none';
+
+    const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
+    if (settingsBtn) {
+      let settingsDot = document.getElementById(SETTINGS_BTN_DOT_ID);
+      if (hasUpdate) {
+        if (!settingsDot) {
+          settingsDot = document.createElement('span');
+          settingsDot.id = SETTINGS_BTN_DOT_ID;
+          settingsDot.className = 'agy-zh-update-dot ml-auto';
+          settingsDot.setAttribute('aria-hidden', 'true');
+          settingsDot.setAttribute('translate', 'no');
+          settingsDot.setAttribute('data-plugin-id', 'zh-cn-ui');
+          settingsBtn.appendChild(settingsDot);
+        } else if (settingsDot.parentElement !== settingsBtn) {
+          settingsBtn.appendChild(settingsDot);
+        }
+        settingsDot.style.display = 'inline-block';
+      } else if (settingsDot && settingsDot.parentNode) {
+        settingsDot.parentNode.removeChild(settingsDot);
+      }
+    }
+
+    const navBtn = document.getElementById(SETTINGS_NAV_BTN_ID);
+    if (navBtn) {
+      const labelEl = navBtn.querySelector('.agy-zh-settings-nav-label');
+      const nextLabel = currentLang === 'zh-CN' ? '语言' : 'Language';
+      if (labelEl && labelEl.textContent !== nextLabel) {
+        labelEl.textContent = nextLabel;
+      }
+      const navDot = navBtn.querySelector('.agy-zh-update-dot');
+      if (navDot && navDot.style.display !== nextDotDisplay) {
+        navDot.style.display = nextDotDisplay;
+      }
+    }
+  }
 
   function mountToggleBadge() {
     ensureZhCnStyles();
@@ -8623,113 +8817,82 @@
     } catch (_) {
       return;
     }
-    const legacyBar = document.getElementById('agy-zh-cn-toggle-bar');
-    if (legacyBar && legacyBar.parentNode) {
-      legacyBar.parentNode.removeChild(legacyBar);
-    }
     if (!document.body) return;
 
-    const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
-    if (!settingsBtn || !settingsBtn.parentElement) return;
+    cleanupLegacySidebarUi();
 
-    let btn = document.getElementById('agy-zh-cn-sidebar-btn');
-    if (btn && btn.getAttribute('data-agy-ui-ver') !== SIDEBAR_UI_VERSION) {
-      if (btn.parentNode) btn.parentNode.removeChild(btn);
-      const staleMenu = document.getElementById('agy-zh-cn-context-menu');
-      if (staleMenu && staleMenu.parentNode) staleMenu.parentNode.removeChild(staleMenu);
-      btn = null;
-    }
-    if (!btn) {
-      btn = document.createElement('button');
-      btn.id = 'agy-zh-cn-sidebar-btn';
-      btn.type = 'button';
-      btn.setAttribute('data-agy-ui-ver', SIDEBAR_UI_VERSION);
-      btn.setAttribute('translate', 'no');
-      btn.setAttribute('data-plugin-id', 'zh-cn-ui');
-      btn.setAttribute('data-external-plugin', 'true');
+    const dom = resolveSettingsDom();
+    if (!dom) {
+      updateToggleBadge();
+      return;
     }
 
-    // 仅左键点击开关弹出菜单，右键恢复默认不触发
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const i18n = window.__AGY_I18N__;
-      if (document.getElementById('agy-zh-cn-context-menu')) {
-        if (i18n && i18n.hideContextMenu) i18n.hideContextMenu();
-        else hideContextMenu();
-      } else {
-        if (i18n && i18n.showContextMenu) i18n.showContextMenu();
-        else showContextMenu();
-      }
-    };
-    btn.oncontextmenu = null;
-    ensureOutsideHandlers();
-
-    // 插在设置按钮（若存在账号切换器则插在其上方）之前，绝不将原生“设置”顶上去，也不破坏账号切换器与设置的相邻关系
-    const anchorTarget = getSidebarAnchorTarget(settingsBtn);
-    if (btn.parentElement !== settingsBtn.parentElement || btn.nextElementSibling !== anchorTarget) {
-      settingsBtn.parentElement.insertBefore(btn, anchorTarget);
+    // 监听侧边栏中其他原生设置项的点击，点击时自动退出“语言”面板
+    if (dom.sidebar.getAttribute('data-agy-settings-bound') !== SETTINGS_UI_VERSION) {
+      dom.sidebar.setAttribute('data-agy-settings-bound', SETTINGS_UI_VERSION);
+      dom.sidebar.addEventListener(
+        'click',
+        (e) => {
+          const target = e.target;
+          if (!target || typeof target.closest !== 'function') return;
+          if (target.closest('#' + SETTINGS_NAV_BTN_ID)) return;
+          if (target.closest('button[data-testid^="settings-nav-item-"]')) {
+            deactivateLanguageSettings();
+          }
+        },
+        true
+      );
     }
 
-    const nextClass = getNormalizedSidebarBtnClass(settingsBtn);
-    if (btn.className !== nextClass) {
-      btn.className = nextClass;
+    let navWrap = document.getElementById(SETTINGS_NAV_ITEM_ID);
+    if (navWrap && navWrap.getAttribute('data-agy-ui-ver') !== SETTINGS_UI_VERSION) {
+      if (navWrap.parentNode) navWrap.parentNode.removeChild(navWrap);
+      navWrap = null;
     }
 
-    if (!btn.querySelector('.agy-zh-cn-sidebar-label')) {
-      const settingsIconEl = settingsBtn.querySelector('span');
-      const settingsTextEl = settingsBtn.querySelector('span.truncate') || settingsBtn.lastElementChild;
-      let iconSize = 16;
-      if (settingsIconEl) {
-        const iconRect = settingsIconEl.getBoundingClientRect();
-        if (iconRect && iconRect.width >= 12 && iconRect.width <= 24) {
-          iconSize = Math.round(iconRect.width);
-        }
-      }
+    if (!navWrap) {
+      navWrap = document.createElement('div');
+      navWrap.id = SETTINGS_NAV_ITEM_ID;
+      navWrap.className = 'relative group/nav-item mx-2';
+      navWrap.setAttribute('data-agy-ui-ver', SETTINGS_UI_VERSION);
+      navWrap.setAttribute('translate', 'no');
+      navWrap.setAttribute('data-plugin-id', 'zh-cn-ui');
+      navWrap.setAttribute('data-external-plugin', 'true');
 
-      let textStyle = '';
-      if (settingsTextEl && typeof window.getComputedStyle === 'function') {
-        const textCs = window.getComputedStyle(settingsTextEl);
-        if (textCs && textCs.fontSize) {
-          textStyle = `font-size:${textCs.fontSize};line-height:${textCs.lineHeight};font-weight:${textCs.fontWeight};`;
-        }
-      }
-
-      btn.innerHTML = '';
-
-      const iconWrap = document.createElement('span');
-      iconWrap.className = 'shrink-0 flex items-center justify-center';
-      iconWrap.style.cssText = `width:${iconSize}px;height:${iconSize}px;`;
-      iconWrap.innerHTML =
-        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-        '<circle cx="12" cy="12" r="10"/>' +
-        '<path d="M2 12h20"/>' +
-        '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>' +
-        '</svg>';
+      const navBtn = document.createElement('button');
+      navBtn.id = SETTINGS_NAV_BTN_ID;
+      navBtn.type = 'button';
+      navBtn.setAttribute('data-testid', 'settings-nav-item-Language');
+      navBtn.className = isLanguageTabActive ? NAV_BTN_ACTIVE_CLASS : NAV_BTN_INACTIVE_CLASS;
 
       const labelEl = document.createElement('span');
-      labelEl.className = 'agy-zh-cn-sidebar-label truncate flex-1 text-left';
-      if (textStyle) labelEl.style.cssText = textStyle;
-
-      const rightWrap = document.createElement('span');
-      rightWrap.className = 'shrink-0 flex items-center gap-1 opacity-60 ml-auto';
+      labelEl.className =
+        'agy-zh-settings-nav-label ' + (isLanguageTabActive ? NAV_SPAN_ACTIVE_CLASS : NAV_SPAN_INACTIVE_CLASS);
+      labelEl.textContent = currentLang === 'zh-CN' ? '语言' : 'Language';
 
       const dotEl = document.createElement('span');
-      dotEl.className = 'agy-zh-cn-update-dot';
+      dotEl.className = 'agy-zh-update-dot';
       dotEl.setAttribute('aria-hidden', 'true');
-      dotEl.style.cssText = 'display:none;width:6px;height:6px;border-radius:9999px;background:var(--primary,#2563eb);';
 
-      const chevronWrap = document.createElement('span');
-      chevronWrap.className = 'flex items-center justify-center';
-      chevronWrap.innerHTML =
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>';
+      navBtn.appendChild(labelEl);
+      navBtn.appendChild(dotEl);
+      navBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        activateLanguageSettings();
+      });
 
-      rightWrap.appendChild(dotEl);
-      rightWrap.appendChild(chevronWrap);
-      btn.appendChild(iconWrap);
-      btn.appendChild(labelEl);
-      btn.appendChild(rightWrap);
+      navWrap.appendChild(navBtn);
     }
 
+    // 紧跟在“浏览器 / Browser”导航项之后（“设置”分组最后一项）
+    if (navWrap.parentElement !== dom.navGroup || navWrap.previousElementSibling !== dom.browserWrap) {
+      dom.navGroup.insertBefore(navWrap, dom.browserWrap.nextSibling);
+    }
+
+    if (isLanguageTabActive) {
+      renderLanguageSettingsPanel();
+    }
     updateToggleBadge();
   }
 
@@ -8761,7 +8924,7 @@
     pendingPostWalkSanitize = false;
     if (currentLang === 'zh-CN') {
       customDict = getCustomDict();
-      updateToggleBadge();
+      refreshLanguageSettingsPanelIfOpen();
       syncObserverMode();
       // 让出当前点击事件帧，保证滑块动画零卡顿；先 O(1) 秒级还原已缓存节点，再按 6ms 时间片分帧补扫全页
       let switchRan = false;
@@ -8790,7 +8953,7 @@
       state.translatedAttrElements.clear();
       syncObserverMode();
     }
-    updateToggleBadge();
+    refreshLanguageSettingsPanelIfOpen();
   }
 
   window.__AGY_I18N__ = {
@@ -8798,6 +8961,7 @@
     handleUpdateEvent,
     checkForUpdates: () => sendUpdateAction('check'),
     isTitleTranslationEnabled,
+    openLanguageSettings,
     showContextMenu,
     hideContextMenu,
     setTitleTranslationEnabled,
@@ -8925,15 +9089,24 @@
     state.sidebarEnsureTimer = setTimeout(() => {
       state.sidebarEnsureTimer = null;
       if (state.instanceId !== instanceId) return;
-      const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
-      if (!settingsBtn) return;
-      const anchorTarget = getSidebarAnchorTarget(settingsBtn);
-      const myBtn = document.getElementById('agy-zh-cn-sidebar-btn');
-      const expectedClass = getNormalizedSidebarBtnClass(settingsBtn);
-      if (!myBtn || myBtn.nextElementSibling !== anchorTarget || myBtn.className !== expectedClass) {
-        mountToggleBadge();
+      if (document.getElementById('agy-zh-cn-sidebar-btn') || document.getElementById('agy-zh-cn-context-menu')) {
+        cleanupLegacySidebarUi();
       }
-    }, 300);
+      const dom = resolveSettingsDom();
+      if (dom) {
+        const navWrap = document.getElementById(SETTINGS_NAV_ITEM_ID);
+        if (
+          !navWrap ||
+          navWrap.getAttribute('data-agy-ui-ver') !== SETTINGS_UI_VERSION ||
+          navWrap.parentElement !== dom.navGroup ||
+          navWrap.previousElementSibling !== dom.browserWrap
+        ) {
+          mountToggleBadge();
+          return;
+        }
+      }
+      updateToggleBadge();
+    }, 60);
   }
 
   function syncObserverMode() {
@@ -8972,7 +9145,12 @@
       for (let i = 0; i < mutations.length; i++) {
         const m = mutations[i];
         const target = m.target;
-        if (target && (target.id === 'agy-zh-cn-sidebar-btn' || target.id === 'agy-zh-cn-context-menu')) {
+        if (
+          target &&
+          (isOwnPluginUiElement(target) ||
+            (typeof target.closest === 'function' &&
+              (target.closest('#' + SETTINGS_PANEL_ID) || target.closest('#' + SETTINGS_NAV_ITEM_ID))))
+        ) {
           continue;
         }
         if (m.type === 'childList') {
