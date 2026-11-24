@@ -3368,6 +3368,14 @@
     "Any message": "任何消息",
     "Specific sender": "特定发送者",
     "Expired": "已过期",
+    "Fired": "已触发",
+    "fired": "已触发",
+    "Timer has expired": "定时器已到期",
+    "Timer expired": "定时器已到期",
+    "Timer cancelled": "定时器已取消",
+    "Timer was cancelled": "定时器已取消",
+    "Timer active": "定时器运行中",
+    "Timer scheduled": "定时器已调度",
     "Skill": "Skill",
     "Rule": "Rule",
     "Sidecars": "Sidecars",
@@ -6417,6 +6425,34 @@
  [/^No agents running$/i, '无运行中的 Agent'],
     [/^(\d+)\s*tasks?\s*running$/i, '$1 个任务运行中'],
     [/^Show\s+(\d+)\s+more\s+subagents?$/i, '展开另外 $1 个子 Agent'],
+    [/^Found\s+(\d+)\s+subagents?(?:\s*([›>]))?$/i, (_m, n, a) => `已找到 ${n} 个子 Agent${a ? ' ' + a : ''}`],
+    [/^Timed\s+(\d+(?:\s*[smhdw])+)(?:\s*([›>]))?$/i, (_m, dur, a) => `定时 ${translateDuration(dur)}${a ? ' ' + a : ''}`],
+    [
+      /^(?:(\d+(?:\s*[smhdw])+)\s+)?timer:\s*(.+?)(?:\s*([›>]))?$/i,
+      (_m, dur, status, a) => {
+        const statusKey = status.trim().toLowerCase();
+        const statusMap = {
+          'timer has expired': '定时器已到期',
+          'timer expired': '定时器已到期',
+          'timer was cancelled': '定时器已取消',
+          'timer cancelled': '定时器已取消',
+          'timer active': '定时器运行中',
+          'timer scheduled': '定时器已调度',
+          'expired': '已到期',
+          'fired': '已触发',
+          'cancelled': '已取消',
+          'canceled': '已取消',
+          'pending': '等待中',
+          'running': '运行中'
+        };
+        const statusZh = statusMap[statusKey] || EXACT_MAP[status.trim()] || status.trim();
+        const prefix = dur ? `${translateDuration(dur)}定时器` : '定时器';
+        return `${prefix}: ${statusZh}${a ? ' ' + a : ''}`;
+      }
+    ],
+    [/^(\d+(?:\s*[smhdw])+)\s+timer:$/i, (_m, dur) => `${translateDuration(dur)}定时器:`],
+    [/^(?:Status|状态):\s*Fired$/i, '状态: 已触发'],
+    [/^Message from\s+(.+?)(?:\s*([›>]))?$/i, (_m, sender, a) => `来自 ${sender} 的消息${a ? ' ' + a : ''}`],
     [/^Last (\d+) days$/i, '最近 $1 天'],
     [/^Conversation (\d+)$/i, '对话 $1'],
     [/^Workspace_(\d+)$/i, '工作区_$1'],
@@ -7250,11 +7286,17 @@
       let translated;
       if (inMarkdownRoot) {
         const trimmedMd = record.orig.trim();
-        const exactMd = EXACT_MAP[trimmedMd] || EXACT_MAP[trimmedMd.replace(/\s+/g, ' ')];
-        if (exactMd) {
-          const leadingMd = record.orig.match(/^\s*/)[0];
-          const trailingMd = record.orig.match(/\s*$/)[0];
-          translated = leadingMd + formatPangu(exactMd) + trailingMd;
+        const isSplitFragment = parent.childNodes.length > 1;
+        const isBareWordOutsideControl =
+          /^[a-zA-Z]+$/.test(trimmedMd) &&
+          !(parent.closest && parent.closest('button, [role="button"], th, td, label, summary, [role="tab"], [role="menuitem"], [data-testid*="badge"], .rounded-full'));
+        if (!isSplitFragment && !isBareWordOutsideControl) {
+          const exactMd = EXACT_MAP[trimmedMd] || EXACT_MAP[trimmedMd.replace(/\s+/g, ' ')];
+          if (exactMd) {
+            const leadingMd = record.orig.match(/^\s*/)[0];
+            const trailingMd = record.orig.match(/\s*$/)[0];
+            translated = leadingMd + formatPangu(exactMd) + trailingMd;
+          }
         }
       } else {
         translated = translateText(record.orig);
