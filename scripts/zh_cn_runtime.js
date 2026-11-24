@@ -4,20 +4,35 @@
   function isAllowedLocalizationContext() {
     try {
       const loc = globalThis.location;
-      if (!loc || !loc.protocol) return true;
+      if (!loc || !loc.protocol) return false;
       const protocol = String(loc.protocol).toLowerCase();
-      if (
-        protocol === 'file:' ||
-        protocol === 'vscode-file:' ||
-        protocol === 'vscode-webview:' ||
-        protocol === 'plugin:' ||
-        protocol === 'about:'
-      ) {
+      if (protocol === 'vscode-file:' || protocol === 'vscode-webview:' || protocol === 'plugin:') {
         return true;
       }
-      if (protocol === 'http:' || protocol === 'https:') {
-        const host = String(loc.hostname || '').toLowerCase();
-        return host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1' || host.endsWith('.localhost');
+      const isLoopbackHttp =
+        (protocol === 'http:' || protocol === 'https:') &&
+        (() => {
+          const host = String(loc.hostname || '').toLowerCase();
+          return host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1' || host.endsWith('.localhost');
+        })();
+      if (protocol === 'file:' || isLoopbackHttp) {
+        let isTop = true;
+        try {
+          isTop = window.self === window.top;
+        } catch (_) {
+          isTop = false;
+        }
+        if (isTop) {
+          return Boolean(
+            window.electronNative ||
+              window.nativeStorage ||
+              (typeof document !== 'undefined' &&
+                document.querySelector(
+                  'link[href*="jetbox.css"], .agy-shell, [data-testid="sidebar-split"], [data-testid="settings-button"]'
+                ))
+          );
+        }
+        return Boolean(window.__AGY_SIDECAR_SUBFRAME__);
       }
       return false;
     } catch (_) {
@@ -26,14 +41,49 @@
   }
   if (!isAllowedLocalizationContext()) return;
 
+  let isSubframeContext = false;
+  try {
+    isSubframeContext =
+      window.self !== window.top ||
+      String(globalThis.location && globalThis.location.protocol || '').toLowerCase() === 'plugin:';
+  } catch (_) {
+    isSubframeContext = true;
+  }
+
   const STORAGE_KEY = 'antigravity.ui.locale';
+  const rawInitLang = window.__AGY_INITIAL_LANG__;
+  const initLangHint = rawInitLang === 'en-US' || rawInitLang === 'zh-CN' ? rawInitLang : null;
+  try {
+    delete window.__AGY_INITIAL_LANG__;
+  } catch (_) {
+    window.__AGY_INITIAL_LANG__ = undefined;
+  }
   let currentLang = 'zh-CN';
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved === 'en-US' || saved === 'zh-CN') {
-      currentLang = saved;
+    if (isSubframeContext) {
+      if (initLangHint) {
+        currentLang = initLangHint;
+      } else if (saved === 'en-US' || saved === 'zh-CN') {
+        currentLang = saved;
+      }
+    } else {
+      if (saved === 'en-US' || saved === 'zh-CN') {
+        currentLang = saved;
+      } else if (initLangHint) {
+        currentLang = initLangHint;
+      }
     }
-  } catch (_) {}
+  } catch (_) {
+    if (initLangHint) currentLang = initLangHint;
+  }
+
+  const deferInitWalk = Boolean(window.__AGY_DEFER_INIT_APPLY__);
+  try {
+    delete window.__AGY_DEFER_INIT_APPLY__;
+  } catch (_) {
+    window.__AGY_DEFER_INIT_APPLY__ = false;
+  }
 
   const state = window.__AGY_I18N_STATE__ || {};
   const instanceId = (state.instanceId || 0) + 1;
@@ -6903,20 +6953,23 @@
     );
   }
 
+  const TOAST_SELECTOR =
+    '[data-testid="toast-notification"], [data-notification-tag], [data-testid="nux-card"], [data-testid*="banner"], [data-testid*="announcement"], [role="status"], [role="alert"], .toast-viewport, [class*="toast-viewport"]';
+  const TOOLBAR_SELECTOR = '[data-testid="user-message-actions"], [data-testid="cascade-system-message-toolbar"]';
+  const PROJECT_HEADER_SELECTOR =
+    '[data-testid="project-header"], [data-testid*="project-header"], [data-testid="sidebar-project-header"]';
+  const CONV_ROW_SELECTOR = '[data-testid="conversation-row-sidebar"], [data-testid*="conversation-row"]';
+  const COMMENT_EDITABLE_EXCLUSION_SELECTOR =
+    '[data-lexical-editor="true"], [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-testid="comment-card-text"]';
+
   function isToastOrNotificationElement(el) {
     if (!el || typeof el.closest !== 'function') return false;
-    return Boolean(
-      el.closest(
-        '[data-testid="toast-notification"], [data-notification-tag], [data-testid="nux-card"], [data-testid*="banner"], [data-testid*="announcement"], [role="status"], [role="alert"], .toast-viewport, [class*="toast-viewport"]'
-      )
-    );
+    return Boolean(el.closest(TOAST_SELECTOR));
   }
 
   function isActionToolbarElement(el) {
     if (!el || typeof el.closest !== 'function') return false;
-    return Boolean(
-      el.closest('[data-testid="user-message-actions"], [data-testid="cascade-system-message-toolbar"]')
-    );
+    return Boolean(el.closest(TOOLBAR_SELECTOR));
   }
 
   const COMMENT_UI_SELECTOR = [
@@ -6948,11 +7001,7 @@
     ) {
       return false;
     }
-    if (
-      el.closest(
-        '[data-lexical-editor="true"], [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-testid="comment-card-text"]'
-      )
-    ) {
+    if (el.closest(COMMENT_EDITABLE_EXCLUSION_SELECTOR)) {
       return false;
     }
     return true;
@@ -7127,19 +7176,21 @@
     return false;
   }
 
-  function processTextNode(node) {
+  function processTextNode(node, ctx) {
     const parent = node.parentElement;
     if (!parent) return;
     if (parent.tagName === 'OPTION' && !parent.hasAttribute('value')) return;
 
-    if (shouldSkipElement(parent)) {
-      const record = state.nodeMap.get(node);
-      if (record && record.orig && node.nodeValue !== record.orig) {
-        node.nodeValue = record.orig;
-        record.translated = null;
-        state.translatedNodes.delete(node);
+    if (!ctx || !ctx.skipChecked) {
+      if (shouldSkipElement(parent)) {
+        const record = state.nodeMap.get(node);
+        if (record && record.orig && node.nodeValue !== record.orig) {
+          node.nodeValue = record.orig;
+          record.translated = null;
+          state.translatedNodes.delete(node);
+        }
+        return;
       }
-      return;
     }
 
     const currentVal = node.nodeValue;
@@ -7150,8 +7201,10 @@
     if ((!currentVal || !currentVal.trim()) && !isCompoundClearedByApp) return;
 
     if (currentLang === 'zh-CN') {
-      const inMarkdownRoot = Boolean(parent.closest && parent.closest('[data-markdown-root]') && !isCommentUiElement(parent));
-      if (!inMarkdownRoot && tryTranslateCompoundTextNodes(parent)) {
+      const inMarkdownRoot = ctx
+        ? Boolean(ctx.inMarkdownRoot && !ctx.inCommentUi)
+        : Boolean(parent.closest && parent.closest('[data-markdown-root]') && !isCommentUiElement(parent));
+      if (!ctx && !inMarkdownRoot && tryTranslateCompoundTextNodes(parent)) {
         return;
       }
       if (!currentVal || !currentVal.trim()) return;
@@ -7200,7 +7253,10 @@
           }
         }
       }
-      if (!translated && parent && parent.closest && parent.closest('[data-testid="conversation-row-sidebar"], [data-testid*="conversation-row"]')) {
+      const inConvRow = ctx
+        ? Boolean(ctx.inConvRow)
+        : Boolean(parent && parent.closest && parent.closest(CONV_ROW_SELECTOR));
+      if (!translated && inConvRow) {
         const relTrimmed = record.orig.trim();
         const relMatch = relTrimmed.match(/^(\d+)\s*(mo|w|d|h|m|y)$/i);
         if (relMatch) {
@@ -7240,8 +7296,8 @@
           record.translated = null;
           state.translatedNodes.delete(node);
         }
-        if (typeof maybeTranslateTitleAsync === 'function') {
-          maybeTranslateTitleAsync(record.orig, node);
+        if (inConvRow && typeof maybeTranslateTitleAsync === 'function') {
+          maybeTranslateTitleAsync(record.orig, node, true);
         }
       }
     } else {
@@ -7252,9 +7308,10 @@
     }
   }
 
-  function processAttributes(el) {
+  function processAttributes(el, options) {
     if (!el || el.nodeType !== 1 || el.id === 'agy-zh-cn-sidebar-btn' || el.id === 'agy-zh-cn-context-menu') return;
-    if (shouldSkipElement(el, { allowInputAttr: true })) return;
+    if (!el.hasAttribute('placeholder') && !el.hasAttribute('title') && !el.hasAttribute('aria-label')) return;
+    if (!(options && options.skipChecked) && shouldSkipElement(el, { allowInputAttr: true })) return;
     for (let i = 0; i < ATTR_LIST.length; i++) {
       const attr = ATTR_LIST[i];
       const val = el.getAttribute(attr);
@@ -7298,6 +7355,7 @@
 
   function translateCommentUiRoots(root) {
     if (currentLang !== 'zh-CN' || !root || typeof root.querySelectorAll !== 'function') return;
+    if (root.nodeType === 1 && root.childElementCount === 0) return;
     if (root.nodeType === 1 && typeof root.closest === 'function' && root.closest(COMMENT_UI_SELECTOR)) return;
     const targets = root.querySelectorAll(COMMENT_UI_SELECTOR);
     for (let i = 0; i < targets.length; i++) {
@@ -7307,6 +7365,8 @@
     }
   }
 
+  const CODE_CLASS_RE = /\b(?:font-mono|code-block|code-line|code-snippet|prism-code|hljs)\b/i;
+
   function walkAndTranslate(root) {
     if (!root) return;
     if (root.nodeType === 3) {
@@ -7314,6 +7374,17 @@
       return;
     }
     if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
+
+    const rawActive = typeof document !== 'undefined' ? document.activeElement : null;
+    const activeEditable =
+      rawActive &&
+      (rawActive.isContentEditable ||
+        rawActive.tagName === 'INPUT' ||
+        rawActive.tagName === 'TEXTAREA' ||
+        (rawActive.getAttribute && rawActive.getAttribute('data-lexical-editor') === 'true'))
+        ? rawActive
+        : null;
+
     if (root.nodeType === 1) {
       if (root.tagName === 'TEXTAREA' || root.tagName === 'INPUT') {
         processAttributes(root);
@@ -7323,57 +7394,99 @@
         translateCommentUiRoots(root);
         return;
       }
-      processAttributes(root);
+      if (activeEditable && (root === activeEditable || (typeof activeEditable.contains === 'function' && activeEditable.contains(root)))) {
+        return;
+      }
+      processAttributes(root, { skipChecked: true });
+    } else if (root.host && shouldSkipElement(root.host)) {
+      return;
     }
 
-    const walker = document.createTreeWalker(
-      root,
-      NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
-      {
-        acceptNode(node) {
-          if (node.nodeType === 1) {
-            const inToast = isToastOrNotificationElement(node);
-            const inToolbar = isActionToolbarElement(node);
-            const inCommentUi = isCommentUiElement(node);
-            if (inToast || inToolbar || inCommentUi) {
-              const codeAncestor = node.closest(SKIP_CODE_SELECTOR);
-              if (codeAncestor && (!inCommentUi || codeAncestor.closest(COMMENT_UI_SELECTOR))) {
-                return NodeFilter.FILTER_REJECT;
-              }
-              if (isIconElement(node)) {
-                return NodeFilter.FILTER_SKIP;
-              }
-              return NodeFilter.FILTER_ACCEPT;
-            }
-            if (node.closest && node.closest(SKIP_CLOSEST_SELECTOR)) {
-              return NodeFilter.FILTER_REJECT;
-            }
-            if (node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') {
-              processAttributes(node);
-              return NodeFilter.FILTER_REJECT;
-            }
-            if (shouldSkipElement(node, { skipClosestChecked: true })) {
-              return NodeFilter.FILTER_SKIP;
-            }
-            return NodeFilter.FILTER_ACCEPT;
-          }
-          if (node.nodeType === 3) {
-            return NodeFilter.FILTER_ACCEPT;
-          }
-          return NodeFilter.FILTER_SKIP;
+    const initToast = root.nodeType === 1 ? isToastOrNotificationElement(root) : false;
+    const initToolbar = root.nodeType === 1 ? isActionToolbarElement(root) : false;
+    const initCommentUi = root.nodeType === 1 ? isCommentUiElement(root) : false;
+    const initMarkdownRoot = root.nodeType === 1 && root.closest ? Boolean(root.closest('[data-markdown-root]')) : false;
+    const initProtectedMd = root.nodeType === 1 && root.closest ? Boolean(root.closest(MARKDOWN_PROTECTED_ANCESTOR)) : false;
+    const initConvRow = root.nodeType === 1 && root.closest ? Boolean(root.closest(CONV_ROW_SELECTOR)) : false;
+
+    const visitChildren = (parent, inToast, inToolbar, inCommentUi, inMarkdownRoot, inProtectedMd, inConvRow, skipOwnText) => {
+      if (!skipOwnText && currentLang === 'zh-CN' && parent.nodeType === 1 && !(inMarkdownRoot && !inCommentUi)) {
+        if (parent.childElementCount === 0 && parent.childNodes.length > 1 && tryTranslateCompoundTextNodes(parent)) {
+          return;
         }
       }
-    );
-
-    let curr = walker.nextNode();
-    while (curr) {
-      if (curr.nodeType === 3) {
-        processTextNode(curr);
-      } else if (curr.nodeType === 1) {
-        processAttributes(curr);
+      const textCtx = {
+        skipChecked: true,
+        inMarkdownRoot,
+        inConvRow,
+        inCommentUi
+      };
+      for (let child = parent.firstChild; child; child = child.nextSibling) {
+        if (child.nodeType === 3) {
+          if (!skipOwnText) {
+            processTextNode(child, textCtx);
+          }
+        } else if (child.nodeType === 1) {
+          visitElement(child, inToast, inToolbar, inCommentUi, inMarkdownRoot, inProtectedMd, inConvRow);
+        }
       }
-      curr = walker.nextNode();
-    }
+    };
+
+    const visitElement = (el, inToast, inToolbar, inCommentUi, inMarkdownRoot, inProtectedMd, inConvRow) => {
+      if (el.id === 'agy-zh-cn-sidebar-btn' || el.id === 'agy-zh-cn-context-menu') return;
+      const tag = el.tagName;
+      if (tag === 'TEXTAREA' || tag === 'INPUT') {
+        processAttributes(el);
+        return;
+      }
+      if (SKIP_TAGS.has(tag)) return;
+      if (
+        el === activeEditable ||
+        el.isContentEditable ||
+        el.getAttribute('contenteditable') === 'true' ||
+        el.getAttribute('contenteditable') === 'plaintext-only' ||
+        el.getAttribute('contenteditable') === '' ||
+        el.getAttribute('data-lexical-editor') === 'true'
+      ) {
+        return;
+      }
+
+      const nextToast = inToast || el.matches(TOAST_SELECTOR);
+      const nextToolbar = inToolbar || el.matches(TOOLBAR_SELECTOR);
+      if (el.matches('[data-testid="comment-card-text"]')) return;
+      const nextCommentUi = inCommentUi || el.matches(COMMENT_UI_SELECTOR);
+      const nextMarkdownRoot = inMarkdownRoot || el.hasAttribute('data-markdown-root');
+      const nextProtectedMd = inProtectedMd || el.matches(MARKDOWN_PROTECTED_ANCESTOR);
+      const nextConvRow = inConvRow || el.matches(CONV_ROW_SELECTOR);
+
+      if (nextToast || nextToolbar || nextCommentUi) {
+        if (el.matches(SKIP_CODE_SELECTOR)) return;
+      } else {
+        if (
+          el.matches(PROJECT_HEADER_SELECTOR) ||
+          (nextMarkdownRoot && nextProtectedMd) ||
+          el.matches(SKIP_CLOSEST_SELECTOR)
+        ) {
+          return;
+        }
+        const className = typeof el.className === 'string' ? el.className : el.getAttribute('class') || '';
+        if (className && CODE_CLASS_RE.test(className)) return;
+      }
+
+      if (isIconElement(el)) {
+        if (el.firstElementChild) {
+          visitChildren(el, nextToast, nextToolbar, nextCommentUi, nextMarkdownRoot, nextProtectedMd, nextConvRow, true);
+        }
+        return;
+      }
+
+      processAttributes(el, { skipChecked: true });
+      if (el.firstChild) {
+        visitChildren(el, nextToast, nextToolbar, nextCommentUi, nextMarkdownRoot, nextProtectedMd, nextConvRow, false);
+      }
+    };
+
+    visitChildren(root, initToast, initToolbar, initCommentUi, initMarkdownRoot, initProtectedMd, initConvRow, false);
     translateCommentUiRoots(root);
     if (root === document.body || root === document.documentElement) {
       translateFileTreeSidebarHeaders();
@@ -7694,18 +7807,19 @@
   }
 
   const titleTranslatingSet = new Set();
-  async function maybeTranslateTitleAsync(rawText, node) {
+  async function maybeTranslateTitleAsync(rawText, node, skipConvCheck) {
     if (!isTitleTranslationEnabled() || currentLang !== 'zh-CN') return;
     if (!rawText || typeof rawText !== 'string') return;
     if (!node || !node.parentElement) return;
 
     const parentEl = node.parentElement;
-    if (parentEl.closest('[data-testid="project-header"], [data-testid*="project-"], [data-testid*="workspace"], .project-header')) {
-      return;
+    if (!skipConvCheck) {
+      if (parentEl.closest('[data-testid="project-header"], [data-testid*="project-"], [data-testid*="workspace"], .project-header')) {
+        return;
+      }
+      const isConvRow = Boolean(parentEl.closest('[data-testid="conversation-row-sidebar"], [data-testid*="conversation-row"]'));
+      if (!isConvRow) return;
     }
-
-    const isConvRow = Boolean(parentEl.closest('[data-testid="conversation-row-sidebar"], [data-testid*="conversation-row"]'));
-    if (!isConvRow) return;
 
     const s = rawText.trim();
     if (s.length < 3 || s.length > 80 || titleTranslatingSet.has(s)) return;
@@ -8423,25 +8537,25 @@
       btn.className = nextClass;
     }
 
-    const settingsIconEl = settingsBtn.querySelector('span');
-    const settingsTextEl = settingsBtn.querySelector('span.truncate') || settingsBtn.lastElementChild;
-    let iconSize = 16;
-    if (settingsIconEl) {
-      const iconRect = settingsIconEl.getBoundingClientRect();
-      if (iconRect && iconRect.width >= 12 && iconRect.width <= 24) {
-        iconSize = Math.round(iconRect.width);
-      }
-    }
-
-    let textStyle = '';
-    if (settingsTextEl && typeof window.getComputedStyle === 'function') {
-      const textCs = window.getComputedStyle(settingsTextEl);
-      if (textCs && textCs.fontSize) {
-        textStyle = `font-size:${textCs.fontSize};line-height:${textCs.lineHeight};font-weight:${textCs.fontWeight};`;
-      }
-    }
-
     if (!btn.querySelector('.agy-zh-cn-sidebar-label')) {
+      const settingsIconEl = settingsBtn.querySelector('span');
+      const settingsTextEl = settingsBtn.querySelector('span.truncate') || settingsBtn.lastElementChild;
+      let iconSize = 16;
+      if (settingsIconEl) {
+        const iconRect = settingsIconEl.getBoundingClientRect();
+        if (iconRect && iconRect.width >= 12 && iconRect.width <= 24) {
+          iconSize = Math.round(iconRect.width);
+        }
+      }
+
+      let textStyle = '';
+      if (settingsTextEl && typeof window.getComputedStyle === 'function') {
+        const textCs = window.getComputedStyle(settingsTextEl);
+        if (textCs && textCs.fontSize) {
+          textStyle = `font-size:${textCs.fontSize};line-height:${textCs.lineHeight};font-weight:${textCs.fontWeight};`;
+        }
+      }
+
       btn.innerHTML = '';
 
       const iconWrap = document.createElement('span');
@@ -8481,33 +8595,56 @@
     updateToggleBadge();
   }
 
-  function setLanguage(lang) {
-    currentLang = lang === 'en-US' ? 'en-US' : 'zh-CN';
+  function restoreNativeArrayMap() {
+    if (state.contextMenuRestoreTimer) {
+      clearTimeout(state.contextMenuRestoreTimer);
+      state.contextMenuRestoreTimer = null;
+    }
+    if (window.__AGY_ORIG_ARRAY_MAP__ && Array.prototype.map !== window.__AGY_ORIG_ARRAY_MAP__) {
+      Array.prototype.map = window.__AGY_ORIG_ARRAY_MAP__;
+    }
+  }
+
+  function setLanguage(lang, options) {
+    const nextLang = lang === 'en-US' ? 'en-US' : 'zh-CN';
+    const isSilent = Boolean(options && options.silent);
+    currentLang = nextLang;
     try {
       window.localStorage.setItem(STORAGE_KEY, currentLang);
     } catch (_) {}
-    try {
-      console.log('__AGY_CONFIG_SYNC__:' + JSON.stringify({ language: currentLang }));
-    } catch (_) {}
+    if (!isSilent && !isSubframeContext) {
+      try {
+        console.log('__AGY_CONFIG_SYNC__:' + JSON.stringify({ language: currentLang }));
+      } catch (_) {}
+    }
     document.documentElement.lang = currentLang;
     pendingNodes.clear();
     if (currentLang === 'zh-CN') {
       customDict = getCustomDict();
       updateToggleBadge();
+      syncObserverMode();
       // 让出当前点击事件帧，保证滑块动画零卡顿；先 O(1) 秒级还原已缓存节点，再按 6ms 时间片分帧补扫全页
+      let switchRan = false;
       const runAsyncSwitch = () => {
+        if (switchRan) return;
+        switchRan = true;
         if (state.instanceId !== instanceId || currentLang !== 'zh-CN') return;
         fastRestoreCachedChinese();
         scheduleChunkedBodyWalk();
       };
-      if (typeof window.requestAnimationFrame === 'function') {
+      if (!isSubframeContext && !document.hidden && typeof window.requestAnimationFrame === 'function') {
         window.requestAnimationFrame(runAsyncSwitch);
+        setTimeout(runAsyncSwitch, 32);
       } else {
         setTimeout(runAsyncSwitch, 0);
       }
       return;
     } else {
+      restoreNativeArrayMap();
       restoreAllToEnglish();
+      state.translatedNodes.clear();
+      state.translatedAttrElements.clear();
+      syncObserverMode();
     }
     updateToggleBadge();
   }
@@ -8537,16 +8674,32 @@
     },
     updateTitleCache: (entries) => {
       if (!entries || typeof entries !== 'object') return;
-      window.__AGY_TITLE_CACHE__ = Object.assign(window.__AGY_TITLE_CACHE__ || {}, entries);
+      const existing = window.__AGY_TITLE_CACHE__ || {};
+      let hasDiff = false;
+      const keys = Object.keys(entries);
+      for (let i = 0; i < keys.length; i++) {
+        const k = keys[i];
+        if (existing[k] !== entries[k]) {
+          hasDiff = true;
+          break;
+        }
+      }
+      if (!hasDiff) return;
+      window.__AGY_TITLE_CACHE__ = Object.assign(existing, entries);
       try {
         window.localStorage.setItem(TITLE_CACHE_STORAGE_KEY, JSON.stringify(window.__AGY_TITLE_CACHE__));
       } catch (_) {}
       if (currentLang === 'zh-CN' && isTitleTranslationEnabled()) {
         translateCache.clear();
-        restoreAllToEnglish();
-        state.nodeMap = new WeakMap();
-        state.translatedNodes.clear();
-        walkAndTranslate(document.body);
+        const sidebarList = document.querySelector('[data-testid="conversation-list-sidebar"]');
+        if (sidebarList) {
+          walkAndTranslate(sidebarList);
+        } else {
+          restoreAllToEnglish();
+          state.nodeMap = new WeakMap();
+          state.translatedNodes.clear();
+          walkAndTranslate(document.body);
+        }
       }
     },
     getLanguage: () => currentLang,
@@ -8562,12 +8715,17 @@
       state.attrMap = new WeakMap();
       state.translatedNodes.clear();
       state.translatedAttrElements.clear();
+      syncObserverMode();
       if (currentLang === 'zh-CN') {
         walkAndTranslate(document.body);
+      } else {
+        restoreNativeArrayMap();
       }
       mountToggleBadge();
       updateToggleBadge();
-      sanitizeBrandAndWorkspaceHeaders();
+      if (currentLang === 'zh-CN') {
+        sanitizeBrandAndWorkspaceHeaders();
+      }
     },
     addCustomEntries: (entries) => {
       if (!entries || typeof entries !== 'object') return;
@@ -8629,22 +8787,34 @@
     }, 300);
   }
 
-  function startObserver() {
-    if (!document.body) {
-      window.addEventListener(
-        'DOMContentLoaded',
-        () => {
-          if (state.instanceId !== instanceId) return;
-          startObserver();
-        },
-        { once: true }
-      );
-      return;
+  function syncObserverMode() {
+    if (!document.body) return;
+    if (state.observer) {
+      try {
+        state.observer.disconnect();
+      } catch (_) {}
+      state.observer = null;
     }
-    document.documentElement.lang = currentLang;
-    mountToggleBadge();
-    if (currentLang === 'zh-CN') {
-      walkAndTranslate(document.body);
+
+    if (currentLang === 'en-US') {
+      if (isSubframeContext) {
+        return;
+      }
+      const lightObserver = new MutationObserver((mutations) => {
+        if (state.sidebarEnsureTimer) return;
+        for (let i = 0; i < mutations.length; i++) {
+          if (mutations[i].type === 'childList') {
+            scheduleEnsureSidebarButton();
+            return;
+          }
+        }
+      });
+      lightObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      state.observer = lightObserver;
+      return;
     }
 
     const observer = new MutationObserver((mutations) => {
@@ -8658,17 +8828,13 @@
               cleanupRemovedNode(m.removedNodes[r]);
             }
           }
-          if (currentLang === 'zh-CN') {
-            for (let j = 0; j < m.addedNodes.length; j++) {
-              scheduleWalk(m.addedNodes[j]);
-            }
+          for (let j = 0; j < m.addedNodes.length; j++) {
+            scheduleWalk(m.addedNodes[j]);
           }
-        } else if (currentLang === 'zh-CN') {
-          if (m.type === 'characterData') {
-            scheduleWalk(m.target);
-          } else if (m.type === 'attributes') {
-            processAttributes(m.target);
-          }
+        } else if (m.type === 'characterData') {
+          scheduleWalk(m.target);
+        } else if (m.type === 'attributes') {
+          processAttributes(m.target);
         }
       }
       if (hasChildChange) {
@@ -8684,6 +8850,26 @@
       attributeFilter: ATTR_LIST
     });
     state.observer = observer;
+  }
+
+  function startObserver() {
+    if (!document.body) {
+      window.addEventListener(
+        'DOMContentLoaded',
+        () => {
+          if (state.instanceId !== instanceId) return;
+          startObserver();
+        },
+        { once: true }
+      );
+      return;
+    }
+    document.documentElement.lang = currentLang;
+    mountToggleBadge();
+    if (currentLang === 'zh-CN' && !deferInitWalk) {
+      walkAndTranslate(document.body);
+    }
+    syncObserverMode();
   }
 
   const NOTIFICATION_MAP = {
@@ -8765,7 +8951,7 @@
   window.__AGY_TRANSLATE_NOTIFICATION__ = translateNotificationText;
 
   function hookNotification() {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || isSubframeContext) return;
 
     // 1. Hook window.nativeNotifications (Antigravity 专有系统桌面通知 API)
     function setupNativeNotificationsHook() {
@@ -8844,29 +9030,23 @@
   }
 
   function hookNativeContextMenuInRenderer() {
-    if (window.__AGY_CONTEXT_MENU_MAP_HOOKED__) return;
-    window.__AGY_CONTEXT_MENU_MAP_HOOKED__ = true;
+    if (!window.__AGY_ORIG_ARRAY_MAP__) {
+      window.__AGY_ORIG_ARRAY_MAP__ = Array.prototype.map;
+    }
+    const origArrayMap = window.__AGY_ORIG_ARRAY_MAP__;
+    restoreNativeArrayMap();
 
-    let inContextMenuWindow = false;
-    let contextMenuTimer = null;
-    window.addEventListener(
-      'contextmenu',
-      () => {
-        inContextMenuWindow = true;
-        if (contextMenuTimer) clearTimeout(contextMenuTimer);
-        contextMenuTimer = setTimeout(() => {
-          inContextMenuWindow = false;
-        }, 80);
-      },
-      true
-    );
+    if (state.contextMenuHandler) {
+      try {
+        window.removeEventListener('contextmenu', state.contextMenuHandler, true);
+      } catch (_) {}
+      state.contextMenuHandler = null;
+    }
 
-    const origArrayMap = Array.prototype.map;
-    Array.prototype.map = function (callback, thisArg) {
+    function wrappedArrayMap(callback, thisArg) {
       const result = origArrayMap.call(this, callback, thisArg);
       const i18n = window.__AGY_I18N__;
       if (
-        inContextMenuWindow &&
         i18n &&
         typeof i18n.getLanguage === 'function' &&
         i18n.getLanguage() === 'zh-CN' &&
@@ -8891,7 +9071,24 @@
         }
       }
       return result;
+    }
+
+    const onContextMenu = () => {
+      if (currentLang !== 'zh-CN') return;
+      Array.prototype.map = wrappedArrayMap;
+      if (state.contextMenuRestoreTimer) {
+        clearTimeout(state.contextMenuRestoreTimer);
+      }
+      state.contextMenuRestoreTimer = setTimeout(() => {
+        state.contextMenuRestoreTimer = null;
+        if (Array.prototype.map === wrappedArrayMap) {
+          Array.prototype.map = origArrayMap;
+        }
+      }, 80);
     };
+
+    state.contextMenuHandler = onContextMenu;
+    window.addEventListener('contextmenu', onContextMenu, true);
   }
 
   hookNotification();

@@ -50,18 +50,21 @@ if (shouldRun) {
       ? `
         try {
           const { syncHistoricalTitles } = require(${JSON.stringify(syncScript)});
-          syncHistoricalTitles().then(() => {
-            try {
-              const { injectLive } = require(${JSON.stringify(injectScript)});
-              injectLive('apply', 3, 300).catch(() => {});
-            } catch (_) {}
-          }).catch(() => {});
+          const { injectLive } = require(${JSON.stringify(injectScript)});
+          syncHistoricalTitles().then((res) => {
+            if (res && res.count > 0) {
+              return injectLive('sync-titles', 1, 300).catch(() => {}).then(() => injectLive('ensure', 1, 300).catch(() => {}));
+            }
+            return injectLive('ensure', 2, 300).catch(() => {});
+          }).catch(() => {
+            injectLive('ensure', 2, 300).catch(() => {});
+          });
         } catch (_) {}
       `
       : `
         try {
           const { injectLive } = require(${JSON.stringify(injectScript)});
-          injectLive('apply', 3, 300).catch(() => {});
+          injectLive('ensure', 2, 300).catch(() => {});
         } catch (_) {}
       `;
 

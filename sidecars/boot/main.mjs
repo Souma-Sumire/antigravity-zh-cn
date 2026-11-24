@@ -93,7 +93,7 @@ function fetchMainTarget(port) {
       res.on('end', () => {
         try {
           const targets = JSON.parse(raw);
-          const page = targets.find(
+          const validPages = targets.filter(
             (t) =>
               t.type === 'page' &&
               t.webSocketDebuggerUrl &&
@@ -102,7 +102,26 @@ function fetchMainTarget(port) {
               !String(t.url).startsWith('devtools://') &&
               !String(t.url).startsWith('data:')
           );
-          resolve(page || null);
+          const isHubUrl = (u) => {
+            try {
+              const p = new URL(u);
+              const proto = p.protocol.toLowerCase();
+              if (proto === 'vscode-file:' || proto === 'vscode-webview:') return true;
+              if (proto === 'https:') {
+                const h = p.hostname.toLowerCase();
+                return h === '127.0.0.1' || h === 'localhost' || h === '[::1]' || h === '::1';
+              }
+              return false;
+            } catch (_) {
+              return false;
+            }
+          };
+          const page =
+            validPages.find((t) => isHubUrl(t.url) && String(t.title || '').includes('Antigravity')) ||
+            validPages.find((t) => isHubUrl(t.url)) ||
+            validPages.find((t) => String(t.title || '').includes('Antigravity')) ||
+            null;
+          resolve(page);
         } catch (_) {
           resolve(null);
         }
@@ -114,6 +133,16 @@ function fetchMainTarget(port) {
       resolve(null);
     });
   });
+}
+
+function readConfiguredLanguage() {
+  try {
+    if (fs.existsSync(configPath)) {
+      const json = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (json && json.language === 'en-US') return 'en-US';
+    }
+  } catch (_) {}
+  return 'zh-CN';
 }
 
 function isTitleTranslateConfigEnabled() {
@@ -146,14 +175,17 @@ function saveTitleTranslateConfig(enabled) {
 
 function buildInjectionScript() {
   if (!fs.existsSync(runtimeScriptPath)) return '';
-  let prefix = '';
+  const lang = readConfiguredLanguage();
+  const enabled = isTitleTranslateConfigEnabled();
+  let prefix =
+    `try{window.__AGY_INITIAL_LANG__=${JSON.stringify(lang)};` +
+    `window.localStorage.setItem("__agy_enable_remote_title_trans__",${JSON.stringify(enabled ? '1' : '0')});}catch(_){}\n`;
   try {
     if (fs.existsSync(cachePath)) {
       const safeJson = JSON.stringify(JSON.parse(fs.readFileSync(cachePath, 'utf8')));
       prefix += `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${safeJson});}catch(_){}\n`;
     }
   } catch (_) {}
-  const enabled = isTitleTranslateConfigEnabled();
   const runtimeCode = fs.readFileSync(runtimeScriptPath, 'utf8');
   return `${prefix}${runtimeCode}\n;try{window.__AGY_I18N__&&window.__AGY_I18N__.syncConfigFromMain(${enabled});}catch(_){}`;
 }
@@ -177,6 +209,7 @@ class ZhCnSidecarBridge {
     this.activePort = null;
     this.isConnecting = false;
     this.reconnectTimer = null;
+    this.ensureTimer = null;
     this.portWatcher = null;
     this.portDirTimer = null;
     this.newDocScriptId = null;
@@ -214,18 +247,43 @@ class ZhCnSidecarBridge {
   }
 
   async injectIfNeeded(force = false) {
+    if (!force) {
+      const checkRes = await this.evaluate('Boolean(window.__AGY_I18N__)').catch(() => null);
+      const alreadyLoaded = Boolean(checkRes && checkRes.result && checkRes.result.value === true);
+      if (!alreadyLoaded) {
+        const code = buildInjectionScript();
+        if (code) {
+          await this.evaluate(`try{if(!window.__AGY_I18N__){${code}}}catch(_){}`).catch(() => {});
+        }
+      }
+      try {
+        const { injectLive } = require(path.join(scriptsDir, 'inject_live.js'));
+        if (typeof injectLive === 'function') {
+          injectLive('ensure', 0, 200).catch(() => {});
+        }
+      } catch (_) {}
+      return;
+    }
+
     const code = buildInjectionScript();
     if (!code) return;
-    const expr = force
-      ? code
-      : `try{if(!window.__AGY_I18N__){${code}}}catch(_){}`;
-    await this.evaluate(expr).catch(() => {});
+    await this.evaluate(code).catch(() => {});
     try {
       const { injectLive } = require(path.join(scriptsDir, 'inject_live.js'));
       if (typeof injectLive === 'function') {
         injectLive('apply', 1, 200).catch(() => {});
       }
     } catch (_) {}
+  }
+
+  scheduleEnsure(delayMs = 500) {
+    if (this.ensureTimer) clearTimeout(this.ensureTimer);
+    this.ensureTimer = setTimeout(() => {
+      this.ensureTimer = null;
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.injectIfNeeded(false);
+      }
+    }, delayMs);
   }
 
   async handleConsoleMessage(text) {
@@ -256,6 +314,10 @@ class ZhCnSidecarBridge {
             const cur = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
             cur.language = data.language === 'en-US' ? 'en-US' : 'zh-CN';
             fs.writeFileSync(configPath, JSON.stringify(cur, null, 2), 'utf8');
+            const { injectLive } = require(path.join(scriptsDir, 'inject_live.js'));
+            if (typeof injectLive === 'function') {
+              injectLive('ensure', 0, 100).catch(() => {});
+            }
           } catch (_) {}
         }
         if (typeof data.enableRemoteTitleTranslation !== 'undefined') {
@@ -430,7 +492,7 @@ class ZhCnSidecarBridge {
             msg.method === 'Page.loadEventFired' ||
             msg.method === 'Page.navigatedWithinDocument'
           ) {
-            this.injectIfNeeded(false);
+            this.scheduleEnsure(500);
           }
 
           if (msg.method === 'Runtime.consoleAPICalled' && msg.params && Array.isArray(msg.params.args)) {
@@ -542,6 +604,10 @@ class ZhCnSidecarBridge {
 
   stop() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.ensureTimer) {
+      clearTimeout(this.ensureTimer);
+      this.ensureTimer = null;
+    }
     if (this.portDirTimer) {
       clearInterval(this.portDirTimer);
       this.portDirTimer = null;

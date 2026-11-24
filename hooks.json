@@ -8,13 +8,6 @@
         "timeout": 5
       }
     ],
-    "PreInvocation": [
-      {
-        "type": "command",
-        "command": "node ./scripts/session_hook.js",
-        "timeout": 5
-      }
-    ],
     "Stop": [
       {
         "type": "command",

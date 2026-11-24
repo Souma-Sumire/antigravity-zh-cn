@@ -127,59 +127,136 @@ async function resolveActiveTargetList() {
   );
 }
 
+function isCandidateTargetUrl(rawUrl, targetType) {
+  if (!rawUrl || typeof rawUrl !== 'string') return false;
+  if (rawUrl === 'about:blank' || rawUrl.startsWith('data:') || rawUrl.startsWith('devtools://')) {
+    return false;
+  }
+  try {
+    const u = new URL(rawUrl);
+    const proto = u.protocol.toLowerCase();
+    if (targetType === 'iframe') {
+      return proto === 'plugin:';
+    }
+    if (targetType !== 'page') return false;
+    if (proto === 'vscode-file:' || proto === 'vscode-webview:' || proto === 'plugin:' || proto === 'file:') {
+      return true;
+    }
+    if (proto === 'http:' || proto === 'https:') {
+      const host = u.hostname.toLowerCase();
+      return host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1' || host.endsWith('.localhost');
+    }
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
+function readTranslationConfig() {
+  let enableRemoteTitleTranslation = process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1';
+  let language = 'zh-CN';
+  try {
+    const configFile = path.join(os.homedir(), '.gemini', 'antigravity', 'translation_config.json');
+    if (fs.existsSync(configFile)) {
+      const json = JSON.parse(fs.readFileSync(configFile, 'utf8')) || {};
+      if (!enableRemoteTitleTranslation) {
+        enableRemoteTitleTranslation = Boolean(json.enableRemoteTitleTranslation);
+      }
+      if (json.language === 'en-US' || json.language === 'zh-CN') {
+        language = json.language;
+      }
+    }
+  } catch (_) {}
+  return { enableRemoteTitleTranslation, language };
+}
+
+const PREFLIGHT_EXPR = `(function(){try{var loc=globalThis.location,p=String(loc&&loc.protocol||"").toLowerCase(),isPlugin=p==="plugin:",isVscode=p==="vscode-file:"||p==="vscode-webview:",isTop=true;try{isTop=window.self===window.top;}catch(_){isTop=false;}var isHub=isPlugin||isVscode||(isTop&&Boolean(window.electronNative||window.nativeStorage||(typeof document!=="undefined"&&document.querySelector('link[href*="jetbox.css"], .agy-shell, [data-testid="sidebar-split"], [data-testid="settings-button"]'))));var i18n=window.__AGY_I18N__;return {isHub:isHub,isPlugin:isPlugin,loaded:Boolean(i18n),lang:i18n&&i18n.getLanguage?i18n.getLanguage():null};}catch(_){return {isHub:false,isPlugin:false,loaded:false,lang:null};}})()`;
+
 async function injectOnce(action = 'apply') {
   const { targets } = await resolveActiveTargetList();
 
+  let titleCacheJson = '';
   let titleCacheCode = '';
   try {
     const cacheFile = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
     if (fs.existsSync(cacheFile)) {
       const cacheStr = fs.readFileSync(cacheFile, 'utf8');
-      const safeJson = JSON.stringify(JSON.parse(cacheStr));
-      titleCacheCode = `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${safeJson});}catch(_){}\n`;
+      titleCacheJson = JSON.stringify(JSON.parse(cacheStr));
+      titleCacheCode = `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${titleCacheJson});}catch(_){}\n`;
     }
   } catch (_) {}
 
-  let titleTransEnabled = false;
-  try {
-    if (process.env.AGY_ENABLE_REMOTE_TITLE_TRANSLATION === '1') {
-      titleTransEnabled = true;
-    } else {
-      const configFile = path.join(os.homedir(), '.gemini', 'antigravity', 'translation_config.json');
-      if (fs.existsSync(configFile)) {
-        titleTransEnabled = Boolean(JSON.parse(fs.readFileSync(configFile, 'utf8')).enableRemoteTitleTranslation);
-      }
-    }
-  } catch (_) {}
-
-  const runtimeCode = titleCacheCode + fs.readFileSync(runtimeScriptPath, 'utf8');
-  const syncCfgExpr = `window.__AGY_I18N__&&window.__AGY_I18N__.syncConfigFromMain(${titleTransEnabled}),`;
-  let expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.apply(), window.__AGY_I18N__.getStats());`;
-  if (action === 'toggle') {
-    expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.toggle(), window.__AGY_I18N__.getStats());`;
-  } else if (action === 'en') {
-    expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.setLanguage("en-US"), window.__AGY_I18N__.getStats());`;
-  } else if (action === 'zh') {
-    expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.setLanguage("zh-CN"), window.__AGY_I18N__.getStats());`;
-  }
-
+  const cfg = readTranslationConfig();
+  const titleTransEnabled = cfg.enableRemoteTitleTranslation;
+  const configuredLang = cfg.language;
   const pages = targets.filter(
-    (t) =>
-      (t.type === 'page' || (t.type === 'iframe' && String(t.url).startsWith('plugin://'))) &&
-      t.webSocketDebuggerUrl &&
-      t.url &&
-      t.url !== 'about:blank' &&
-      !String(t.url).startsWith('devtools://') &&
-      !String(t.url).startsWith('data:')
+    (t) => t.webSocketDebuggerUrl && isCandidateTargetUrl(t.url, t.type)
   );
 
   if (pages.length === 0) {
     throw new Error('No active renderer page targets ready');
   }
 
+  let runtimeCodeCache = null;
+  const getFullRuntimeCode = (deferInitApply, initLang) => {
+    if (runtimeCodeCache === null) {
+      runtimeCodeCache = fs.readFileSync(runtimeScriptPath, 'utf8');
+    }
+    const flags =
+      `try{window.__AGY_INITIAL_LANG__=${JSON.stringify(initLang)};` +
+      (deferInitApply ? 'window.__AGY_DEFER_INIT_APPLY__=true;' : '') +
+      `window.localStorage.setItem("__agy_enable_remote_title_trans__",${JSON.stringify(titleTransEnabled ? '1' : '0')});}catch(_){}\n`;
+    return flags + titleCacheCode + runtimeCodeCache;
+  };
+
   const results = [];
+  let eligibleCount = 0;
+
   for (const page of pages) {
     try {
+      const preRes = await evalInTarget(page.webSocketDebuggerUrl, PREFLIGHT_EXPR);
+      const preflight = preRes && preRes.result && preRes.result.result ? preRes.result.result.value : null;
+      if (!preflight || !preflight.isHub) {
+        continue;
+      }
+      eligibleCount++;
+
+      let expr = '';
+      if (action === 'ensure') {
+        if (preflight.loaded) {
+          if (preflight.isPlugin && preflight.lang !== configuredLang) {
+            expr = `window.__AGY_I18N__ && (window.__AGY_I18N__.setLanguage(${JSON.stringify(configuredLang)}, { silent: true }), window.__AGY_I18N__.getStats());`;
+          } else {
+            expr = `window.__AGY_I18N__ && window.__AGY_I18N__.getStats();`;
+          }
+        } else {
+          expr = getFullRuntimeCode(false, configuredLang) + `\n;window.__AGY_I18N__ && window.__AGY_I18N__.getStats();`;
+        }
+      } else if (action === 'sync-titles') {
+        if (!preflight.loaded) {
+          continue;
+        }
+        if (titleCacheJson && !preflight.isPlugin) {
+          expr = `window.__AGY_I18N__ && (window.__AGY_I18N__.updateTitleCache(${titleCacheJson}), window.__AGY_I18N__.getStats());`;
+        } else {
+          expr = `window.__AGY_I18N__ && window.__AGY_I18N__.getStats();`;
+        }
+      } else {
+        const initLang = action === 'en' ? 'en-US' : action === 'zh' ? 'zh-CN' : configuredLang;
+        const runtimeCode = getFullRuntimeCode(true, initLang);
+        const syncCfgExpr = `window.__AGY_I18N__&&window.__AGY_I18N__.syncConfigFromMain(${titleTransEnabled}),`;
+        const silentArg = preflight.isPlugin ? ', { silent: true }' : '';
+        if (action === 'toggle') {
+          expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.toggle(), window.__AGY_I18N__.getStats());`;
+        } else if (action === 'en') {
+          expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.setLanguage("en-US"${silentArg}), window.__AGY_I18N__.getStats());`;
+        } else if (action === 'zh') {
+          expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.setLanguage("zh-CN"${silentArg}), window.__AGY_I18N__.getStats());`;
+        } else {
+          expr = runtimeCode + `\n;window.__AGY_I18N__ && (${syncCfgExpr} window.__AGY_I18N__.apply(), window.__AGY_I18N__.getStats());`;
+        }
+      }
+
       const res = await evalInTarget(page.webSocketDebuggerUrl, expr);
       if (res && res.result && res.result.exceptionDetails) {
         console.error('Exception in target:', page.url, res.result.exceptionDetails.text);
@@ -190,6 +267,12 @@ async function injectOnce(action = 'apply') {
     } catch (_) {}
   }
 
+  if (action === 'sync-titles') {
+    return results;
+  }
+  if (eligibleCount === 0) {
+    throw new Error('No eligible Antigravity renderer targets ready');
+  }
   if (results.length === 0) {
     throw new Error('All targets failed evaluation');
   }

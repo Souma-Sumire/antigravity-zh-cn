@@ -860,17 +860,24 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       const type = typeof wc.getType === 'function' ? wc.getType() : 'window';
       if (type !== 'window') return;
     } catch (_) {}
+    try {
+      const defaultSession = electron.session ? electron.session.defaultSession : null;
+      if (defaultSession && wc.session && wc.session !== defaultSession) return;
+    } catch (_) {}
 
-    const getTitleCacheInjection = () => {
+    const getBootstrapPrefix = (options = {}) => {
+      const langLiteral = JSON.stringify(getLanguageConfig());
+      const subframeFlag = options && options.isSidecarSubframe ? 'window.__AGY_SIDECAR_SUBFRAME__=true;' : '';
+      let cacheAssign = '';
       try {
         const cachePath = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
         if (fs.existsSync(cachePath)) {
           const cache = fs.readFileSync(cachePath, 'utf8');
           const safeJson = JSON.stringify(JSON.parse(cache));
-          return `try{window.__AGY_MAIN_BOOT_HOOK_ACTIVE__=true;window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${safeJson});}catch(_){}\n`;
+          cacheAssign = `window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${safeJson});`;
         }
       } catch (_) {}
-      return 'try{window.__AGY_MAIN_BOOT_HOOK_ACTIVE__=true;}catch(_){}\n';
+      return `try{window.__AGY_MAIN_BOOT_HOOK_ACTIVE__=true;window.__AGY_INITIAL_LANG__=${langLiteral};${subframeFlag}${cacheAssign}}catch(_){}\n`;
     };
 
     const isAllowedPageUrl = (rawUrl) => {
@@ -899,7 +906,20 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       if (!isAllowedPageUrl(url)) return;
       const code = getRuntimeScript();
       if (!code) return;
-      wc.executeJavaScript(getTitleCacheInjection() + code, true).catch(() => {});
+      wc.executeJavaScript(getBootstrapPrefix() + code, true).catch(() => {});
+    };
+
+    const ensureInjectIfMissing = () => {
+      if (wc.isDestroyed()) return;
+      const url = wc.getURL ? wc.getURL() : '';
+      if (!isAllowedPageUrl(url)) return;
+      wc.executeJavaScript('Boolean(window.__AGY_I18N__)', true)
+        .then((hasI18n) => {
+          if (!hasI18n && !wc.isDestroyed()) {
+            runInjectImmediate();
+          }
+        })
+        .catch(() => {});
     };
 
     const resolveSubframe = (event, frameProcessId, frameRoutingId) => {
@@ -908,6 +928,15 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         return electron.webFrameMain.fromId(frameProcessId, frameRoutingId) || null;
       }
       return null;
+    };
+
+    const syncLanguageToFrame = (frame, lang) => {
+      if (!frame || (frame.isDestroyed && frame.isDestroyed())) return;
+      Promise.resolve(
+        frame.executeJavaScript(
+          `try{window.__AGY_I18N__&&window.__AGY_I18N__.setLanguage&&window.__AGY_I18N__.setLanguage(${JSON.stringify(lang)},{silent:true});}catch(_){}`
+        )
+      ).catch(() => {});
     };
 
     const injectSidecarSubframe = (frame) => {
@@ -919,35 +948,80 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
         if (!isAllowedPageUrl(frameUrl) || !/^(?:https?|plugin):/i.test(frameUrl)) return;
         const code = getRuntimeScript();
         if (!code) return;
-        if (frameUrl.toLowerCase().startsWith('plugin://')) {
-          Promise.resolve(frame.executeJavaScript(getTitleCacheInjection() + code)).catch(() => {});
-          return;
-        }
-        const checkExpr = '(function(u){try{var t=new URL(u),els=document.querySelectorAll(\'iframe[data-testid="sidecar-iframe"]\');for(var i=0;i<els.length;i++){var raw=els[i].getAttribute(\'src\')||els[i].src||\'\';if(!raw)continue;var s=new URL(raw,location.href);if(s.protocol===t.protocol&&s.host===t.host)return true;}}catch(_){}return false;})(' + JSON.stringify(frameUrl) + ')';
-        Promise.resolve(mainFrame.executeJavaScript(checkExpr))
-          .then((isSidecar) => {
-            if (!isSidecar || (frame.isDestroyed && frame.isDestroyed()) || wc.isDestroyed()) return;
-            return frame.executeJavaScript(getTitleCacheInjection() + code);
+        Promise.resolve(frame.executeJavaScript('Boolean(window.__AGY_I18N__)'))
+          .then((hasI18n) => {
+            if ((frame.isDestroyed && frame.isDestroyed()) || wc.isDestroyed()) return;
+            if (hasI18n) {
+              syncLanguageToFrame(frame, getLanguageConfig());
+              return;
+            }
+            if (frameUrl.toLowerCase().startsWith('plugin://')) {
+              return frame.executeJavaScript(getBootstrapPrefix({ isSidecarSubframe: true }) + code);
+            }
+            const checkExpr = '(function(u){try{var t=new URL(u),els=document.querySelectorAll(\'iframe[data-testid="sidecar-iframe"]\');for(var i=0;i<els.length;i++){var raw=els[i].getAttribute(\'src\')||els[i].src||\'\';if(!raw)continue;var s=new URL(raw,location.href);if(s.protocol===t.protocol&&s.host===t.host)return true;}}catch(_){}return false;})(' + JSON.stringify(frameUrl) + ')';
+            return Promise.resolve(mainFrame.executeJavaScript(checkExpr))
+              .then((isSidecar) => {
+                if (!isSidecar || (frame.isDestroyed && frame.isDestroyed()) || wc.isDestroyed()) return;
+                return frame.executeJavaScript(getBootstrapPrefix({ isSidecarSubframe: true }) + code);
+              });
           })
           .catch(() => {});
       } catch (_) {}
     };
 
-    wc.on('console-message', (_event, _level, message) => {
+    const broadcastLanguageAcrossWindows = (lang) => {
+      const langLiteral = JSON.stringify(lang);
+      const syncExpr = `try{window.__AGY_I18N__&&window.__AGY_I18N__.setLanguage&&window.__AGY_I18N__.setLanguage(${langLiteral},{silent:true});}catch(_){}`;
+      const defaultSession = electron.session ? electron.session.defaultSession : null;
+      const syncSubframes = (targetWc) => {
+        try {
+          const mf = targetWc && targetWc.mainFrame;
+          if (!mf || !Array.isArray(mf.frames)) return;
+          for (const sub of mf.frames) {
+            if (sub && sub !== mf) {
+              syncLanguageToFrame(sub, lang);
+            }
+          }
+        } catch (_) {}
+      };
+      syncSubframes(wc);
+      if (electron.BrowserWindow && typeof electron.BrowserWindow.getAllWindows === 'function') {
+        for (const win of electron.BrowserWindow.getAllWindows()) {
+          const targetWc = win && !win.isDestroyed() ? win.webContents : null;
+          if (!targetWc || targetWc.isDestroyed()) continue;
+          if (defaultSession && targetWc.session && targetWc.session !== defaultSession) continue;
+          if (targetWc !== wc) {
+            targetWc.executeJavaScript(syncExpr, true).catch(() => {});
+            syncSubframes(targetWc);
+          }
+        }
+      }
+    };
+
+    wc.on('console-message', (event, _level, legacyMessage) => {
+      const message =
+        typeof legacyMessage === 'string'
+          ? legacyMessage
+          : event && typeof event.message === 'string'
+            ? event.message
+            : '';
       if (typeof message === 'string' && message.startsWith('__AGY_CONFIG_SYNC__:')) {
         try {
           const data = JSON.parse(message.slice('__AGY_CONFIG_SYNC__:'.length));
           if (typeof data.language === 'string') {
             saveLanguageConfig(data.language);
+            broadcastLanguageAcrossWindows(getLanguageConfig());
           }
           if (typeof data.enableRemoteTitleTranslation !== 'undefined') {
             const nextEnabled = Boolean(data.enableRemoteTitleTranslation);
             saveTitleTranslateConfig(nextEnabled);
             if (electron.BrowserWindow && typeof electron.BrowserWindow.getAllWindows === 'function') {
+              const defaultSession = electron.session ? electron.session.defaultSession : null;
               for (const win of electron.BrowserWindow.getAllWindows()) {
-                if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed() && win.webContents !== wc) {
-                  win.webContents.executeJavaScript(`try{window.__AGY_I18N__&&window.__AGY_I18N__.syncConfigFromMain&&window.__AGY_I18N__.syncConfigFromMain(${nextEnabled});}catch(_){}`, true).catch(() => {});
-                }
+                const targetWc = win && !win.isDestroyed() ? win.webContents : null;
+                if (!targetWc || targetWc.isDestroyed() || targetWc === wc) continue;
+                if (defaultSession && targetWc.session && targetWc.session !== defaultSession) continue;
+                targetWc.executeJavaScript(`try{window.__AGY_I18N__&&window.__AGY_I18N__.syncConfigFromMain&&window.__AGY_I18N__.syncConfigFromMain(${nextEnabled});}catch(_){}`, true).catch(() => {});
               }
             }
             if (nextEnabled) {
@@ -958,10 +1032,12 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
                 Promise.resolve(syncHistoricalTitles()).then(() => {
                   const cacheJson = JSON.stringify(getCacheMap() || {});
                   if (electron.BrowserWindow && typeof electron.BrowserWindow.getAllWindows === 'function') {
+                    const defaultSession = electron.session ? electron.session.defaultSession : null;
                     for (const win of electron.BrowserWindow.getAllWindows()) {
-                      if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
-                        win.webContents.executeJavaScript(`try{window.__AGY_I18N__&&window.__AGY_I18N__.updateTitleCache&&window.__AGY_I18N__.updateTitleCache(${cacheJson});}catch(_){}`, true).catch(() => {});
-                      }
+                      const targetWc = win && !win.isDestroyed() ? win.webContents : null;
+                      if (!targetWc || targetWc.isDestroyed()) continue;
+                      if (defaultSession && targetWc.session && targetWc.session !== defaultSession) continue;
+                      targetWc.executeJavaScript(`try{window.__AGY_I18N__&&window.__AGY_I18N__.updateTitleCache&&window.__AGY_I18N__.updateTitleCache(${cacheJson});}catch(_){}`, true).catch(() => {});
                     }
                   }
                 }).catch(() => {});
@@ -1044,12 +1120,14 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
                 lastMtime = 0;
                 const newCode = getRuntimeScript();
                 const allWindows = electron.BrowserWindow ? electron.BrowserWindow.getAllWindows() : [];
+                const defaultSession = electron.session ? electron.session.defaultSession : null;
                 for (const win of allWindows) {
                   if (win && win.webContents && !win.webContents.isDestroyed()) {
                     const targetWc = win.webContents;
+                    if (defaultSession && targetWc.session && targetWc.session !== defaultSession) continue;
                     const targetUrl = targetWc.getURL ? targetWc.getURL() : '';
                     if (isAllowedPageUrl(targetUrl) && newCode) {
-                      await targetWc.executeJavaScript(getTitleCacheInjection() + newCode, true).catch(() => {});
+                      await targetWc.executeJavaScript(getBootstrapPrefix() + newCode, true).catch(() => {});
                     }
                   }
                 }
@@ -1084,14 +1162,12 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       syncInitialConfig();
     });
     wc.on('did-finish-load', () => {
-      runInjectImmediate();
+      ensureInjectIfMissing();
       syncInitialConfig();
     });
     wc.on('did-navigate-in-page', () => {
-      if (wc.isDestroyed()) return;
-      const url = wc.getURL ? wc.getURL() : '';
-      if (!isAllowedPageUrl(url)) return;
-      wc.executeJavaScript('try{if(!window.__AGY_I18N__){' + getRuntimeScript() + '}}catch(_){}', true).catch(() => {});
+      ensureInjectIfMissing();
+      syncInitialConfig();
     });
     wc.on('did-frame-navigate', (event, _url, _code, _status, isMainFrame, frameProcessId, frameRoutingId) => {
       if (isMainFrame) return;
