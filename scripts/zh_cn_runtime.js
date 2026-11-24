@@ -5817,7 +5817,13 @@
     "Search sites": "搜索网站",
     "Work in a CitC workspace.": "在 CitC 工作区中工作。",
     "Work in a Cog workspace.": "在 Cog 工作区中工作。",
-    "Work in an ABFS workspace.": "在 ABFS 工作区中工作。"
+    "Work in an ABFS workspace.": "在 ABFS 工作区中工作。",
+    "Loading older messages…": "正在加载更早的消息…",
+    "Loading older messages...": "正在加载更早的消息...",
+    "Searching older messages…": "正在搜索更早的消息…",
+    "Searching older messages...": "正在搜索更早的消息...",
+    "Couldn't load older messages — retry": "无法加载更早的消息 — 重试",
+    "Couldn't load older messages, retry": "无法加载更早的消息，重试"
   };
 
   const SCOPE_NOUN_MAP = {
@@ -6687,6 +6693,14 @@
     [
       /^Leaving on\s+([A-Za-z]+)\s+(\d+)(?:,\s*(\d{4}))?\.?$/i,
       (_m, month, day, year) => `将于 ${year ? `${year}年` : ''}${MONTH_NAMES[month.toLowerCase()] || month}${day}日 下线。`
+    ],
+    [
+      /^No messages in last (\d+) steps?\s*[—-]\s*load older$/i,
+      (_m, count) => `最近 ${count} 步中没有消息 — 加载更早消息`
+    ],
+    [
+      /^No messages in last (\d+) steps?,\s*load older$/i,
+      (_m, count) => `最近 ${count} 步中没有消息，加载更早消息`
     ]
   ];
 
