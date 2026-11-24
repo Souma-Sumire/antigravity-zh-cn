@@ -99,6 +99,18 @@
     state.sidebarEnsureTimer = null;
   }
 
+  if (state.pruneTimer) {
+    clearTimeout(state.pruneTimer);
+    state.pruneTimer = null;
+  }
+
+  if (typeof state.cancelFlush === 'function') {
+    try {
+      state.cancelFlush();
+    } catch (_) {}
+    state.cancelFlush = null;
+  }
+
   if (state.observer) {
     try {
       state.observer.disconnect();
@@ -6959,6 +6971,8 @@
   const PROJECT_HEADER_SELECTOR =
     '[data-testid="project-header"], [data-testid*="project-header"], [data-testid="sidebar-project-header"]';
   const CONV_ROW_SELECTOR = '[data-testid="conversation-row-sidebar"], [data-testid*="conversation-row"]';
+  const FILE_TREE_SIDEBAR_SELECTOR = '[data-testid="tab-file-tree-sidebar"]';
+  const FILE_TREE_ITEM_SELECTOR = '[role="treeitem"], [data-file-uri], [data-uri], [data-testid="file-title-name"]';
   const COMMENT_EDITABLE_EXCLUSION_SELECTOR =
     '[data-lexical-editor="true"], [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-testid="comment-card-text"]';
 
@@ -7005,6 +7019,13 @@
       return false;
     }
     return true;
+  }
+
+  function isFileTreeSidebarHeaderElement(el) {
+    if (!el || typeof el.closest !== 'function') return false;
+    if (!el.closest(FILE_TREE_SIDEBAR_SELECTOR)) return false;
+    if (el.closest(FILE_TREE_ITEM_SELECTOR)) return false;
+    return Boolean(el.closest('button, [role="button"]'));
   }
 
   const MARKDOWN_PROTECTED_ANCESTOR = [
@@ -7075,6 +7096,13 @@
       if (codeAncestor && codeAncestor.closest(COMMENT_UI_SELECTOR)) {
         return true;
       }
+      if (isIconElement(el)) {
+        return true;
+      }
+      return false;
+    }
+
+    if (isFileTreeSidebarHeaderElement(el)) {
       if (isIconElement(el)) {
         return true;
       }
@@ -7392,6 +7420,7 @@
       }
       if (shouldSkipElement(root)) {
         translateCommentUiRoots(root);
+        translateFileTreeSidebarHeaders(root);
         return;
       }
       if (activeEditable && (root === activeEditable || (typeof activeEditable.contains === 'function' && activeEditable.contains(root)))) {
@@ -7462,6 +7491,10 @@
       if (nextToast || nextToolbar || nextCommentUi) {
         if (el.matches(SKIP_CODE_SELECTOR)) return;
       } else {
+        if (el.matches('[aria-label="File Viewer"], [aria-label="文件查看器"]')) {
+          translateFileTreeSidebarHeaders(el);
+          return;
+        }
         if (
           el.matches(PROJECT_HEADER_SELECTOR) ||
           (nextMarkdownRoot && nextProtectedMd) ||
@@ -7489,19 +7522,58 @@
     visitChildren(root, initToast, initToolbar, initCommentUi, initMarkdownRoot, initProtectedMd, initConvRow, false);
     translateCommentUiRoots(root);
     if (root === document.body || root === document.documentElement) {
-      translateFileTreeSidebarHeaders();
+      translateFileTreeSidebarHeaders(root);
       sanitizeBrandAndWorkspaceHeaders();
     }
   }
 
-  function translateFileTreeSidebarHeaders() {
+  function translateFileTreeSidebarHeaders(root) {
     if (currentLang !== 'zh-CN' || typeof document === 'undefined') return;
-    const sidebars = document.querySelectorAll('[data-testid="tab-file-tree-sidebar"]');
-    sidebars.forEach((sidebar) => {
-      const buttons = sidebar.querySelectorAll('button, [role="button"]');
-      buttons.forEach((btn) => {
-        if (btn.closest('[role="treeitem"], [data-file-uri], [data-uri], [data-testid="file-title-name"]')) return;
-        processAttributes(btn);
+    const scope = root || document;
+    if (!scope || (scope.nodeType !== 1 && scope.nodeType !== 9 && scope.nodeType !== 11)) return;
+
+    let targets;
+    if (scope.nodeType === 1) {
+      if (typeof scope.matches === 'function' && scope.matches(FILE_TREE_SIDEBAR_SELECTOR)) {
+        targets = [scope];
+      } else if (typeof scope.closest === 'function' && scope.closest(FILE_TREE_SIDEBAR_SELECTOR)) {
+        if (scope.closest(FILE_TREE_ITEM_SELECTOR)) return;
+        targets = [scope];
+      } else if (
+        scope.childElementCount > 0 &&
+        !(typeof scope.matches === 'function' && scope.matches('.code-line, [data-line-tokens], [data-file-uri], [data-uri]')) &&
+        !(typeof scope.closest === 'function' && scope.closest('.file-viewer-root'))
+      ) {
+        targets = scope.querySelectorAll(FILE_TREE_SIDEBAR_SELECTOR);
+      } else {
+        return;
+      }
+    } else if (typeof scope.querySelectorAll === 'function') {
+      targets = scope.querySelectorAll(FILE_TREE_SIDEBAR_SELECTOR);
+    } else {
+      return;
+    }
+
+    if (!targets || targets.length === 0) return;
+
+    for (let i = 0; i < targets.length; i++) {
+      const container = targets[i];
+      if (!container || container.nodeType !== 1) continue;
+      const buttons = [];
+      if (typeof container.matches === 'function' && container.matches('button, [role="button"]')) {
+        buttons.push(container);
+      }
+      if (typeof container.querySelectorAll === 'function') {
+        const innerButtons = container.querySelectorAll('button, [role="button"]');
+        for (let k = 0; k < innerButtons.length; k++) {
+          buttons.push(innerButtons[k]);
+        }
+      }
+
+      for (let b = 0; b < buttons.length; b++) {
+        const btn = buttons[b];
+        if (btn.closest && btn.closest(FILE_TREE_ITEM_SELECTOR)) continue;
+        processAttributes(btn, { skipChecked: true });
         const walker = document.createTreeWalker(btn, NodeFilter.SHOW_TEXT);
         let textNode = walker.nextNode();
         while (textNode) {
@@ -7530,8 +7602,8 @@
           }
           textNode = walker.nextNode();
         }
-      });
-    });
+      }
+    }
   }
 
   function sanitizeBrandAndWorkspaceHeaders() {
@@ -7618,6 +7690,7 @@
 
   function scheduleChunkedBodyWalk() {
     if (typeof document === 'undefined' || !document.body) return;
+    pendingPostWalkSanitize = true;
     const queue = [{ node: document.body, depth: 0 }];
     let guard = 0;
     while (queue.length > 0 && guard < 400) {
@@ -7628,6 +7701,7 @@
         if (depth < 4 && cur.children && cur.children.length > 0) {
           if (cur !== document.body && shouldSkipElement(cur)) {
             translateCommentUiRoots(cur);
+            translateFileTreeSidebarHeaders(cur);
             continue;
           }
           processAttributes(cur);
@@ -7680,6 +7754,22 @@
 
   let pendingNodes = new Set();
   let rafScheduled = false;
+  let rafId = null;
+  let flushTimerId = null;
+  let pendingPostWalkSanitize = false;
+
+  function cancelScheduledFlush() {
+    if (rafId !== null && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(rafId);
+    }
+    rafId = null;
+    if (flushTimerId !== null) {
+      clearTimeout(flushTimerId);
+      flushTimerId = null;
+    }
+    rafScheduled = false;
+  }
+  state.cancelFlush = cancelScheduledFlush;
 
   function pruneAncestorNodes(nodes) {
     if (nodes.length <= 1) return nodes;
@@ -7703,9 +7793,11 @@
   }
 
   function flushPending() {
-    rafScheduled = false;
+    if (!rafScheduled) return;
+    cancelScheduledFlush();
     if (state.instanceId !== instanceId || currentLang !== 'zh-CN') {
       pendingNodes.clear();
+      pendingPostWalkSanitize = false;
       return;
     }
     const batch = pruneAncestorNodes(Array.from(pendingNodes));
@@ -7726,20 +7818,22 @@
         }
       }
     }
-    if (pendingNodes.size === 0) {
-      translateFileTreeSidebarHeaders();
+    if (pendingNodes.size === 0 && pendingPostWalkSanitize) {
+      pendingPostWalkSanitize = false;
       sanitizeBrandAndWorkspaceHeaders();
     }
   }
 
   function scheduleRafFlush() {
-    if (!rafScheduled) {
-      rafScheduled = true;
-      if (typeof window.requestAnimationFrame === 'function') {
-        window.requestAnimationFrame(flushPending);
-      }
-      setTimeout(() => { if (rafScheduled) flushPending(); }, 32);
+    if (rafScheduled || state.instanceId !== instanceId) return;
+    rafScheduled = true;
+    if (typeof window.requestAnimationFrame === 'function') {
+      rafId = window.requestAnimationFrame(flushPending);
     }
+    flushTimerId = setTimeout(() => {
+      flushTimerId = null;
+      if (rafScheduled) flushPending();
+    }, 32);
   }
 
   function scheduleWalk(node) {
@@ -8400,13 +8494,15 @@
   function updateToggleBadge() {
     const btn = document.getElementById('agy-zh-cn-sidebar-btn');
     if (!btn) return;
+    const nextLabel = currentLang === 'zh-CN' ? '简体中文' : 'English';
     const labelEl = btn.querySelector('.agy-zh-cn-sidebar-label');
-    if (labelEl) {
-      labelEl.textContent = currentLang === 'zh-CN' ? '简体中文' : 'English';
+    if (labelEl && labelEl.textContent !== nextLabel) {
+      labelEl.textContent = nextLabel;
     }
+    const nextDotDisplay = updateState.status === 'available' ? 'inline-block' : 'none';
     const dotEl = btn.querySelector('.agy-zh-cn-update-dot');
-    if (dotEl) {
-      dotEl.style.display = updateState.status === 'available' ? 'inline-block' : 'none';
+    if (dotEl && dotEl.style.display !== nextDotDisplay) {
+      dotEl.style.display = nextDotDisplay;
     }
     if (btn.hasAttribute('title')) {
       btn.removeAttribute('title');
@@ -8618,7 +8714,9 @@
       } catch (_) {}
     }
     document.documentElement.lang = currentLang;
+    cancelScheduledFlush();
     pendingNodes.clear();
+    pendingPostWalkSanitize = false;
     if (currentLang === 'zh-CN') {
       customDict = getCustomDict();
       updateToggleBadge();
@@ -8640,6 +8738,10 @@
       }
       return;
     } else {
+      if (state.pruneTimer) {
+        clearTimeout(state.pruneTimer);
+        state.pruneTimer = null;
+      }
       restoreNativeArrayMap();
       restoreAllToEnglish();
       state.translatedNodes.clear();
@@ -8708,6 +8810,9 @@
     translate: (text) => translateText(text),
     formatPangu: (text) => formatPangu(text),
     apply: () => {
+      cancelScheduledFlush();
+      pendingNodes.clear();
+      pendingPostWalkSanitize = false;
       customDict = getCustomDict();
       translateCache.clear();
       restoreAllToEnglish();
@@ -8752,23 +8857,25 @@
     if (!node || (state.translatedNodes.size === 0 && state.translatedAttrElements.size === 0)) return;
     state.translatedNodes.delete(node);
     state.translatedAttrElements.delete(node);
-    if (
-      node.nodeType === 1 &&
-      node.childNodes &&
-      node.childNodes.length > 0 &&
-      typeof document !== 'undefined' &&
-      typeof document.createTreeWalker === 'function'
-    ) {
-      try {
-        const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-        let curr = walker.nextNode();
-        while (curr) {
-          state.translatedNodes.delete(curr);
-          state.translatedAttrElements.delete(curr);
-          curr = walker.nextNode();
+  }
+
+  function schedulePruneDisconnected() {
+    if (state.translatedNodes.size === 0 && state.translatedAttrElements.size === 0) return;
+    if (state.pruneTimer) return;
+    state.pruneTimer = setTimeout(() => {
+      state.pruneTimer = null;
+      if (state.instanceId !== instanceId) return;
+      state.translatedNodes.forEach((node) => {
+        if (!node || !node.isConnected) {
+          state.translatedNodes.delete(node);
         }
-      } catch (_) {}
-    }
+      });
+      state.translatedAttrElements.forEach((el) => {
+        if (!el || !el.isConnected) {
+          state.translatedAttrElements.delete(el);
+        }
+      });
+    }, 2000);
   }
 
   function scheduleEnsureSidebarButton() {
@@ -8819,23 +8926,65 @@
 
     const observer = new MutationObserver((mutations) => {
       let hasChildChange = false;
+      let hasRemovals = false;
       for (let i = 0; i < mutations.length; i++) {
         const m = mutations[i];
+        const target = m.target;
+        if (target && (target.id === 'agy-zh-cn-sidebar-btn' || target.id === 'agy-zh-cn-context-menu')) {
+          continue;
+        }
         if (m.type === 'childList') {
           hasChildChange = true;
           if (m.removedNodes && m.removedNodes.length > 0) {
+            hasRemovals = true;
             for (let r = 0; r < m.removedNodes.length; r++) {
               cleanupRemovedNode(m.removedNodes[r]);
             }
           }
           for (let j = 0; j < m.addedNodes.length; j++) {
-            scheduleWalk(m.addedNodes[j]);
+            const added = m.addedNodes[j];
+            if (
+              added &&
+              added.nodeType === 1 &&
+              added.hasAttribute('data-index') &&
+              added.firstElementChild &&
+              added.firstElementChild.classList &&
+              added.firstElementChild.classList.contains('code-line')
+            ) {
+              const gutterBtn = added.querySelector('[data-testid="gutter-comment-button"]');
+              if (gutterBtn) {
+                processAttributes(gutterBtn, { skipChecked: true });
+              }
+              continue;
+            }
+            scheduleWalk(added);
           }
         } else if (m.type === 'characterData') {
-          scheduleWalk(m.target);
+          if (target) {
+            const rec = state.nodeMap.get(target);
+            if (rec && target.nodeValue === rec.translated) {
+              continue;
+            }
+          }
+          scheduleWalk(target);
         } else if (m.type === 'attributes') {
-          processAttributes(m.target);
+          if (target) {
+            const attrRec = state.attrMap.get(target);
+            const attrName = m.attributeName;
+            if (
+              attrRec &&
+              attrName &&
+              attrRec[attrName] &&
+              target.getAttribute(attrName) === attrRec[attrName].translated
+            ) {
+              continue;
+            }
+          }
+          processAttributes(target);
         }
+      }
+      if (hasRemovals) {
+        schedulePruneDisconnected();
       }
       if (hasChildChange) {
         scheduleEnsureSidebarButton();
