@@ -5801,7 +5801,21 @@
     "Waiting for the agents’ windows…": "正在等待 Agent 窗口…",
     "Waiting for tool permission approval — click Open in full conversation (↗) to approve": "等待工具权限审批 — 点击“在完整对话中打开 (↗)”进行审批",
     "Weekdays": "工作日",
-    "Workspace > Restore to Snapshot": "工作区 > 还原到快照"
+    "Workspace > Restore to Snapshot": "工作区 > 还原到快照",
+    "Create a project on this computer or remotely.": "在此计算机或远程创建项目。",
+    "Create a project on a machine you reach over SSH. It opens in that host's own window.": "在通过 SSH 连接的远程主机上创建项目，并将在该主机的独立窗口中打开。",
+    "Day of the month": "每月几号",
+    "Day of the week": "星期几",
+    "GitHub: not signed in": "GitHub：未登录",
+    "How often": "重复频率",
+    "Number of hours": "小时数",
+    "Permission decision": "权限决策",
+    "Pinned Actions": "已置顶操作",
+    "Repeat unit": "重复单位",
+    "Search sites": "搜索网站",
+    "Work in a CitC workspace.": "在 CitC 工作区中工作。",
+    "Work in a Cog workspace.": "在 Cog 工作区中工作。",
+    "Work in an ABFS workspace.": "在 ABFS 工作区中工作。"
   };
 
   const SCOPE_NOUN_MAP = {

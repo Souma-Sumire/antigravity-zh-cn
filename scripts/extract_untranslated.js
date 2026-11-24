@@ -121,7 +121,7 @@ function extractCandidatesFromCode(code) {
   const candidates = new Set();
 
   // 模式 1: UI 对象属性
-  const propRegex = /\b(?:label|title|description|tooltip|placeholder|message|header|heading|emptyText|emptyMessage|btnText|buttonText|confirmText|cancelText|tabName|actionText|helpText|hintText|subtext|prompt|subtitle|badge|detail|errorMessage|successMessage|warningMessage)\s*:\s*(["'])(.+?)\1/g;
+  const propRegex = /\b(?:label|title|description|tooltip|tooltipText|tooltipContent|hoverText|helperText|ariaLabel|placeholder|message|header|heading|emptyText|emptyMessage|btnText|buttonText|confirmText|cancelText|tabName|actionText|helpText|hintText|subtext|prompt|subtitle|badge|detail|errorMessage|successMessage|warningMessage)\s*:\s*(["'])(.+?)\1/g;
   let m;
   while ((m = propRegex.exec(code)) !== null) {
     if (isValidUiString(m[2])) candidates.add(m[2]);
@@ -157,7 +157,7 @@ function extractCandidatesFromCode(code) {
   }
 
   // 模式 6: 属性条件与三目运算符表达式 (例如 placeholder: cond ? "Str1" : "Str2")
-  const ternaryRegex = /\b(?:label|title|description|tooltip|placeholder|message|header|heading|emptyText|emptyMessage|btnText|buttonText|confirmText|cancelText|tabName|actionText|helpText|hintText|subtext|prompt|subtitle|badge|detail|errorMessage|successMessage|warningMessage|["']aria-label["']|["']placeholder["']|["']title["'])\s*:\s*([^,{}]+)/g;
+  const ternaryRegex = /\b(?:label|title|description|tooltip|tooltipText|tooltipContent|hoverText|helperText|ariaLabel|placeholder|message|header|heading|emptyText|emptyMessage|btnText|buttonText|confirmText|cancelText|tabName|actionText|helpText|hintText|subtext|prompt|subtitle|badge|detail|errorMessage|successMessage|warningMessage|["']aria-label["']|["']placeholder["']|["']title["'])\s*:\s*([^,{}]+)/g;
   while ((m = ternaryRegex.exec(code)) !== null) {
     const expr = m[1];
     const innerStrRegex = /(["'])(.+?)\1/g;
