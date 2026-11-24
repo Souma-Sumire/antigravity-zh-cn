@@ -1060,6 +1060,14 @@
     "Compacting": "压缩中",
     "Thinking...": "思考中...",
     "Thinking…": "思考中...",
+    "Using browser": "正在使用浏览器",
+    "Using browser · Thinking…": "正在使用浏览器 · 思考中…",
+    "Using browser · Thinking...": "正在使用浏览器 · 思考中...",
+    "Loading browser steps…": "正在加载浏览器步骤…",
+    "Loading browser steps...": "正在加载浏览器步骤...",
+    "Browser task still running…": "浏览器任务仍在运行中…",
+    "Browser task still running...": "浏览器任务仍在运行中...",
+    "No browser steps recorded": "未记录浏览器步骤",
     "Prompt": "提示词",
     "Document": "文档",
     "Bounding box": "边界框",
@@ -6393,11 +6401,43 @@
     ],
     [
       /^Working\s*[·\u00b7]\s*(.+)$/i,
-      '处理中 · $1'
+      (_m, rest) => {
+        const trimmed = rest.trim();
+        const translated = /^\d+(?:\s*[smhdw])+$/i.test(trimmed)
+          ? translateDuration(trimmed)
+          : (translateText(trimmed) || trimmed);
+        return `处理中 · ${translated}`;
+      }
     ],
     [
-      /^Thinking\s*\((.+?)\)[…\.\.\.]*$/i,
-      '思考中 ($1)…'
+      /^Thinking\s*\((.+?)\)[…\.]*$/i,
+      (_m, dur) => {
+        const trimmed = dur.trim();
+        const translated = /^\d+(?:\s*[smhdw])+$/i.test(trimmed)
+          ? translateDuration(trimmed)
+          : trimmed;
+        return `思考中 (${translated})…`;
+      }
+    ],
+    [
+      /^Using browser\s*\((\d+(?:\s*[smhdw])+)\)$/i,
+      (_m, dur) => `正在使用浏览器 (${translateDuration(dur)})`
+    ],
+    [
+      /^Using browser\s*[·\u00b7]\s*Thinking\s*\((\d+(?:\s*[smhdw])+)\)[…\.]*$/i,
+      (_m, dur) => `正在使用浏览器 · 思考中 (${translateDuration(dur)})…`
+    ],
+    [
+      /^Using browser\s*[·\u00b7]\s*Thinking[…\.]*$/i,
+      '正在使用浏览器 · 思考中…'
+    ],
+    [
+      /^Using browser\s*[·\u00b7]\s*(.+?)\s*\((\d+(?:\s*[smhdw])+)\)$/i,
+      (_m, rest, dur) => `正在使用浏览器 · ${translateText(rest) || rest} (${translateDuration(dur)})`
+    ],
+    [
+      /^Using browser\s*[·\u00b7]\s*(.+)$/i,
+      (_m, rest) => `正在使用浏览器 · ${translateText(rest) || rest}`
     ],
     [
       /^(\d+)\s*s\s+ago$/i,
@@ -6706,7 +6746,25 @@
     [
       /^No messages in last (\d+) steps?,\s*load older$/i,
       (_m, count) => `最近 ${count} 步中没有消息，加载更早消息`
-    ]
+    ],
+    [/^(\d+)\s+browser\s+steps?$/i, '$1 个浏览器步骤'],
+    [/^(Show|Hide)\s+(\d+)\s+browser\s+steps?$/i, (_m, act, n) => `${act.toLowerCase() === 'hide' ? '隐藏' : '显示'} ${n} 个浏览器步骤`],
+    [/^Showing latest\s+(\d+)\s+browser\s+steps?$/i, '显示最近 $1 个浏览器步骤'],
+    [/^(\d+)\s+subagents?$/i, '$1 个子 Agent'],
+    [/^Starting\s+(\d+)\s+subagents?$/i, '正在启动 $1 个子 Agent'],
+    [/^Started\s+(\d+)\s+subagents?$/i, '已启动 $1 个子 Agent'],
+    [/^Started voice chat\s*[·\u00b7]\s*(.+)$/i, '已开始语音对话 · $1'],
+    [/^Stopped voice chat\s*[·\u00b7]\s*(.+)$/i, (_m, dur) => `已结束语音对话 · ${translateDuration(dur)}`],
+    [
+      /^Started\s+(during|from)\s+(.+)$/i,
+      (_m, prep, target) => {
+        const tMap = { 'the main conversation': '主对话', 'the subagent conversation': '子 Agent 对话' };
+        const t = tMap[target.trim().toLowerCase()] || target;
+        return prep.toLowerCase() === 'during' ? `发起于 ${t} 期间` : `发起自 ${t}`;
+      }
+    ],
+    [/^Starting\s+(.+)$/, '正在启动 $1'],
+    [/^Started\s+(.+)$/, '已启动 $1']
   ];
 
   const MONTH_NAMES = {
