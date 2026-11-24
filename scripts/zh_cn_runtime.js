@@ -4592,6 +4592,7 @@
     "The agent has questions for you:": "Agent 有几个问题要问你：",
     "The agent is waiting for your input.": "Agent 正在等待你的输入。",
     "Model cannot be changed while the agent is running": "Agent 运行期间无法切换模型",
+    "Permissions cannot be changed while the agent is running": "Agent 运行期间无法更改权限",
     "Error during tool execution": "工具执行期间出错",
     "Error while running MCP tool": "运行 MCP 工具时出错",
     "Error while running command": "运行命令时出错",
