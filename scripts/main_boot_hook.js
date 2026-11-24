@@ -900,13 +900,19 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       }
     };
 
+    let hasInjectedMainDoc = false;
+
     const runInjectImmediate = () => {
       if (wc.isDestroyed()) return;
       const url = wc.getURL ? wc.getURL() : '';
       if (!isAllowedPageUrl(url)) return;
       const code = getRuntimeScript();
       if (!code) return;
-      wc.executeJavaScript(getBootstrapPrefix() + code, true).catch(() => {});
+      wc.executeJavaScript(getBootstrapPrefix() + code, true)
+        .then(() => {
+          hasInjectedMainDoc = true;
+        })
+        .catch(() => {});
     };
 
     const ensureInjectIfMissing = () => {
@@ -915,7 +921,9 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       if (!isAllowedPageUrl(url)) return;
       wc.executeJavaScript('Boolean(window.__AGY_I18N__)', true)
         .then((hasI18n) => {
-          if (!hasI18n && !wc.isDestroyed()) {
+          if (hasI18n) {
+            hasInjectedMainDoc = true;
+          } else if (!wc.isDestroyed()) {
             runInjectImmediate();
           }
         })
@@ -1157,6 +1165,11 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       ).catch(() => {});
     };
 
+    wc.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+      if (!isInPlace && isMainFrame) {
+        hasInjectedMainDoc = false;
+      }
+    });
     wc.on('dom-ready', () => {
       runInjectImmediate();
       syncInitialConfig();
@@ -1166,6 +1179,7 @@ if (!global.__AGY_ZH_CN_MAIN_HOOK_LOADED__) {
       syncInitialConfig();
     });
     wc.on('did-navigate-in-page', () => {
+      if (hasInjectedMainDoc) return;
       ensureInjectIfMissing();
       syncInitialConfig();
     });

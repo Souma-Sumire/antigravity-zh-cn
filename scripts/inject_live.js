@@ -136,7 +136,7 @@ function isCandidateTargetUrl(rawUrl, targetType) {
     const u = new URL(rawUrl);
     const proto = u.protocol.toLowerCase();
     if (targetType === 'iframe') {
-      return proto === 'plugin:';
+      return proto === 'plugin:' && !u.hostname.toLowerCase().startsWith('antigravity-pulse--');
     }
     if (targetType !== 'page') return false;
     if (proto === 'vscode-file:' || proto === 'vscode-webview:' || proto === 'plugin:' || proto === 'file:') {
@@ -175,16 +175,22 @@ const PREFLIGHT_EXPR = `(function(){try{var loc=globalThis.location,p=String(loc
 async function injectOnce(action = 'apply') {
   const { targets } = await resolveActiveTargetList();
 
+  let titleCacheLoaded = false;
   let titleCacheJson = '';
   let titleCacheCode = '';
-  try {
-    const cacheFile = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
-    if (fs.existsSync(cacheFile)) {
-      const cacheStr = fs.readFileSync(cacheFile, 'utf8');
-      titleCacheJson = JSON.stringify(JSON.parse(cacheStr));
-      titleCacheCode = `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${titleCacheJson});}catch(_){}\n`;
-    }
-  } catch (_) {}
+  const getTitleCache = () => {
+    if (titleCacheLoaded) return { titleCacheJson, titleCacheCode };
+    titleCacheLoaded = true;
+    try {
+      const cacheFile = path.join(os.homedir(), '.gemini', 'antigravity', 'title_api_cache.json');
+      if (fs.existsSync(cacheFile)) {
+        const cacheStr = fs.readFileSync(cacheFile, 'utf8');
+        titleCacheJson = JSON.stringify(JSON.parse(cacheStr));
+        titleCacheCode = `try{window.__AGY_TITLE_CACHE__=Object.assign(window.__AGY_TITLE_CACHE__||{},${titleCacheJson});}catch(_){}\n`;
+      }
+    } catch (_) {}
+    return { titleCacheJson, titleCacheCode };
+  };
 
   const cfg = readTranslationConfig();
   const titleTransEnabled = cfg.enableRemoteTitleTranslation;
@@ -202,11 +208,12 @@ async function injectOnce(action = 'apply') {
     if (runtimeCodeCache === null) {
       runtimeCodeCache = fs.readFileSync(runtimeScriptPath, 'utf8');
     }
+    const { titleCacheCode: cacheCode } = getTitleCache();
     const flags =
       `try{window.__AGY_INITIAL_LANG__=${JSON.stringify(initLang)};` +
       (deferInitApply ? 'window.__AGY_DEFER_INIT_APPLY__=true;' : '') +
       `window.localStorage.setItem("__agy_enable_remote_title_trans__",${JSON.stringify(titleTransEnabled ? '1' : '0')});}catch(_){}\n`;
-    return flags + titleCacheCode + runtimeCodeCache;
+    return flags + cacheCode + runtimeCodeCache;
   };
 
   const results = [];
@@ -236,8 +243,9 @@ async function injectOnce(action = 'apply') {
         if (!preflight.loaded) {
           continue;
         }
-        if (titleCacheJson && !preflight.isPlugin) {
-          expr = `window.__AGY_I18N__ && (window.__AGY_I18N__.updateTitleCache(${titleCacheJson}), window.__AGY_I18N__.getStats());`;
+        const { titleCacheJson: cacheJson } = getTitleCache();
+        if (cacheJson && !preflight.isPlugin) {
+          expr = `window.__AGY_I18N__ && (window.__AGY_I18N__.updateTitleCache(${cacheJson}), window.__AGY_I18N__.getStats());`;
         } else {
           expr = `window.__AGY_I18N__ && window.__AGY_I18N__.getStats();`;
         }

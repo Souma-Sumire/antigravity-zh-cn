@@ -214,6 +214,7 @@ class ZhCnSidecarBridge {
     this.portDirTimer = null;
     this.newDocScriptId = null;
     this.updateActionInFlight = false;
+    this.lastEnsureLiveAt = 0;
   }
 
   send(method, params = {}) {
@@ -248,14 +249,25 @@ class ZhCnSidecarBridge {
 
   async injectIfNeeded(force = false) {
     if (!force) {
-      const checkRes = await this.evaluate('Boolean(window.__AGY_I18N__)').catch(() => null);
-      const alreadyLoaded = Boolean(checkRes && checkRes.result && checkRes.result.value === true);
+      const checkRes = await this.evaluate(
+        '({ loaded: Boolean(window.__AGY_I18N__), mainHook: Boolean(window.__AGY_MAIN_BOOT_HOOK_ACTIVE__) })'
+      ).catch(() => null);
+      const stateVal = checkRes && checkRes.result && checkRes.result.value;
+      const alreadyLoaded = Boolean(stateVal && stateVal.loaded);
+      if (alreadyLoaded && stateVal.mainHook) {
+        return;
+      }
       if (!alreadyLoaded) {
         const code = buildInjectionScript();
         if (code) {
           await this.evaluate(`try{if(!window.__AGY_I18N__){${code}}}catch(_){}`).catch(() => {});
         }
       }
+      const now = Date.now();
+      if (now - this.lastEnsureLiveAt < 10000) {
+        return;
+      }
+      this.lastEnsureLiveAt = now;
       try {
         const { injectLive } = require(path.join(scriptsDir, 'inject_live.js'));
         if (typeof injectLive === 'function') {
@@ -489,8 +501,7 @@ class ZhCnSidecarBridge {
 
           if (
             msg.method === 'Page.frameNavigated' ||
-            msg.method === 'Page.loadEventFired' ||
-            msg.method === 'Page.navigatedWithinDocument'
+            msg.method === 'Page.loadEventFired'
           ) {
             this.scheduleEnsure(500);
           }

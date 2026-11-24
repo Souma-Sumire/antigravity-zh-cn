@@ -5826,6 +5826,8 @@
     "Couldn't load older messages, retry": "无法加载更早的消息，重试"
   };
 
+  const BUILT_IN_ENTRY_COUNT = Object.keys(EXACT_MAP).length;
+
   const SCOPE_NOUN_MAP = {
     'project': '项目',
     'projects': '项目',
@@ -6798,14 +6800,381 @@
 
   let customDict = getCustomDict();
   let recursionDepth = 0;
-  const TRANSLATE_CACHE_LIMIT = 4000;
+  const TRANSLATE_CACHE_LIMIT = 8000;
+  const TRANSLATE_CACHE_EVICT = 2000;
   const translateCache = new Map();
 
   function setTranslateCache(key, value) {
     if (translateCache.size >= TRANSLATE_CACHE_LIMIT) {
-      translateCache.clear();
+      let removed = 0;
+      for (const k of translateCache.keys()) {
+        translateCache.delete(k);
+        if (++removed >= TRANSLATE_CACHE_EVICT) break;
+      }
     }
     translateCache.set(key, value);
+  }
+
+  function buildRegexBuckets(rules) {
+    const buckets = Object.create(null);
+    const wildcardIndices = [];
+
+    const normalizeBucketChar = (ch) => {
+      if (!ch) return null;
+      const code = ch.charCodeAt(0);
+      if (code >= 48 && code <= 57) return '0';
+      if (code >= 65 && code <= 90) return ch.toLowerCase();
+      return ch;
+    };
+
+    const addChar = (set, ch, ignoreCase) => {
+      const k = normalizeBucketChar(ch);
+      if (k) set.add(k);
+      if (ignoreCase && ch) {
+        const lower = ch.toLowerCase();
+        const upper = ch.toUpperCase();
+        if (lower !== ch) addChar(set, lower, false);
+        if (upper !== ch) addChar(set, upper, false);
+      }
+    };
+
+    const findMatchingBracket = (src, start) => {
+      let i = start + 1;
+      let escaped = false;
+      while (i < src.length) {
+        const c = src[i];
+        if (escaped) {
+          escaped = false;
+        } else if (c === '\\') {
+          escaped = true;
+        } else if (c === ']') {
+          return i;
+        }
+        i++;
+      }
+      return -1;
+    };
+
+    const findMatchingParen = (src, start) => {
+      let i = start + 1;
+      let depth = 1;
+      let escaped = false;
+      let inClass = false;
+      while (i < src.length) {
+        const c = src[i];
+        if (escaped) {
+          escaped = false;
+        } else if (c === '\\') {
+          escaped = true;
+        } else if (inClass) {
+          if (c === ']') inClass = false;
+        } else if (c === '[') {
+          inClass = true;
+        } else if (c === '(') {
+          depth++;
+        } else if (c === ')') {
+          depth--;
+          if (depth === 0) return i;
+        }
+        i++;
+      }
+      return -1;
+    };
+
+    const readEscape = (src, pos) => {
+      if (pos + 1 >= src.length) return null;
+      const next = src[pos + 1];
+      if (next === 'u') {
+        if (src[pos + 2] === '{') {
+          const end = src.indexOf('}', pos + 3);
+          if (end !== -1) {
+            const cp = parseInt(src.slice(pos + 3, end), 16);
+            return { type: 'char', ch: String.fromCodePoint(cp), nextPos: end + 1 };
+          }
+        } else {
+          const hex = src.slice(pos + 2, pos + 6);
+          if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+            return { type: 'char', ch: String.fromCharCode(parseInt(hex, 16)), nextPos: pos + 6 };
+          }
+        }
+      }
+      if (next === 'x') {
+        const hex = src.slice(pos + 2, pos + 4);
+        if (/^[0-9a-fA-F]{2}$/.test(hex)) {
+          return { type: 'char', ch: String.fromCharCode(parseInt(hex, 16)), nextPos: pos + 4 };
+        }
+      }
+      if (next === 'd') return { type: 'digit', nextPos: pos + 2 };
+      if (next === 's') return { type: 'space', nextPos: pos + 2 };
+      if (next === 'b' || next === 'B') return { type: 'assertion', nextPos: pos + 2 };
+      if (next === 'w' || next === 'D' || next === 'S' || next === 'W' || next === 'p' || next === 'P') {
+        return { type: 'wildcard', nextPos: pos + 2 };
+      }
+      if (next === 'n') return { type: 'char', ch: '\n', nextPos: pos + 2 };
+      if (next === 'r') return { type: 'char', ch: '\r', nextPos: pos + 2 };
+      if (next === 't') return { type: 'char', ch: '\t', nextPos: pos + 2 };
+      if (/[1-9]/.test(next)) return { type: 'wildcard', nextPos: pos + 2 };
+      return { type: 'char', ch: next, nextPos: pos + 2 };
+    };
+
+    const parseCharClass = (src, start, end, ignoreCase) => {
+      if (start + 1 >= end || src[start + 1] === '^') return null;
+      const chars = new Set();
+      let i = start + 1;
+      const tokens = [];
+      while (i < end) {
+        if (src[i] === '\\') {
+          const esc = readEscape(src, i);
+          if (!esc || esc.type === 'wildcard') return null;
+          if (esc.type === 'digit') tokens.push({ type: 'digit' });
+          else if (esc.type === 'char') tokens.push({ type: 'char', ch: esc.ch });
+          i = esc.nextPos;
+        } else {
+          tokens.push({ type: 'char', ch: src[i] });
+          i++;
+        }
+      }
+      for (let t = 0; t < tokens.length; t++) {
+        if (
+          t + 2 < tokens.length &&
+          tokens[t].type === 'char' &&
+          tokens[t + 1].type === 'char' &&
+          tokens[t + 1].ch === '-' &&
+          tokens[t + 2].type === 'char'
+        ) {
+          const from = tokens[t].ch.charCodeAt(0);
+          const to = tokens[t + 2].ch.charCodeAt(0);
+          if (to < from || to - from > 36) return null;
+          for (let c = from; c <= to; c++) {
+            addChar(chars, String.fromCharCode(c), ignoreCase);
+          }
+          t += 2;
+        } else if (tokens[t].type === 'digit') {
+          chars.add('0');
+        } else if (tokens[t].type === 'char') {
+          addChar(chars, tokens[t].ch, ignoreCase);
+        }
+      }
+      return chars;
+    };
+
+    const parseQuantifier = (src, pos, end) => {
+      if (pos >= end) return { nullable: false, nextPos: pos };
+      const c = src[pos];
+      if (c === '?' || c === '*') {
+        const nextPos = pos + 1 < end && (src[pos + 1] === '?' || src[pos + 1] === '+') ? pos + 2 : pos + 1;
+        return { nullable: true, nextPos };
+      }
+      if (c === '+') {
+        const nextPos = pos + 1 < end && (src[pos + 1] === '?' || src[pos + 1] === '+') ? pos + 2 : pos + 1;
+        return { nullable: false, nextPos };
+      }
+      if (c === '{') {
+        const m = src.slice(pos, end).match(/^\{(\d+)(?:,(\d*))?\}[?+]?/);
+        if (m) {
+          return { nullable: Number(m[1]) === 0, nextPos: pos + m[0].length };
+        }
+      }
+      return { nullable: false, nextPos: pos };
+    };
+
+    const parseAlt = (src, start, end, ignoreCase) => {
+      const branches = [];
+      let branchStart = start;
+      let depth = 0;
+      let inClass = false;
+      let escaped = false;
+      for (let i = start; i < end; i++) {
+        const c = src[i];
+        if (escaped) {
+          escaped = false;
+        } else if (c === '\\') {
+          escaped = true;
+        } else if (inClass) {
+          if (c === ']') inClass = false;
+        } else if (c === '[') {
+          inClass = true;
+        } else if (c === '(') {
+          depth++;
+        } else if (c === ')') {
+          depth--;
+        } else if (c === '|' && depth === 0) {
+          branches.push([branchStart, i]);
+          branchStart = i + 1;
+        }
+      }
+      branches.push([branchStart, end]);
+
+      const union = new Set();
+      let anyNullable = false;
+      for (let b = 0; b < branches.length; b++) {
+        const res = parseSeq(src, branches[b][0], branches[b][1], ignoreCase);
+        if (!res) return null;
+        res.chars.forEach((ch) => union.add(ch));
+        if (res.nullable) anyNullable = true;
+      }
+      return { chars: union, nullable: anyNullable };
+    };
+
+    const parseSeq = (src, start, end, ignoreCase) => {
+      const resultChars = new Set();
+      let pos = start;
+      while (pos < end) {
+        const c = src[pos];
+        let atomChars = null;
+        let isAssertion = false;
+        let isSpace = false;
+        let nextPos = pos;
+
+        if (c === '^') {
+          pos++;
+          continue;
+        }
+        if (c === '$') {
+          return { chars: resultChars, nullable: true };
+        }
+        if (c === '.') {
+          return null;
+        }
+        if (c === '\\') {
+          const esc = readEscape(src, pos);
+          if (!esc || esc.type === 'wildcard') return null;
+          nextPos = esc.nextPos;
+          if (esc.type === 'assertion') {
+            isAssertion = true;
+          } else if (esc.type === 'space') {
+            isSpace = true;
+          } else if (esc.type === 'digit') {
+            atomChars = new Set(['0']);
+          } else {
+            atomChars = new Set();
+            addChar(atomChars, esc.ch, ignoreCase);
+          }
+        } else if (c === '[') {
+          const close = findMatchingBracket(src, pos);
+          if (close === -1 || close >= end) return null;
+          atomChars = parseCharClass(src, pos, close, ignoreCase);
+          if (!atomChars) return null;
+          nextPos = close + 1;
+        } else if (c === '(') {
+          const close = findMatchingParen(src, pos);
+          if (close === -1 || close >= end) return null;
+          const innerStart = pos + 1;
+          if (
+            src.startsWith('?=', innerStart) ||
+            src.startsWith('?!', innerStart) ||
+            src.startsWith('?<=', innerStart) ||
+            src.startsWith('?<!', innerStart)
+          ) {
+            pos = close + 1;
+            continue;
+          }
+          let bodyStart = innerStart;
+          if (src.startsWith('?:', innerStart)) {
+            bodyStart = innerStart + 2;
+          } else if (src.startsWith('?<', innerStart)) {
+            const nameEnd = src.indexOf('>', innerStart + 2);
+            if (nameEnd === -1 || nameEnd >= close) return null;
+            bodyStart = nameEnd + 1;
+          } else if (src[innerStart] === '?') {
+            return null;
+          }
+          const sub = parseAlt(src, bodyStart, close, ignoreCase);
+          if (!sub) return null;
+          const q = parseQuantifier(src, close + 1, end);
+          sub.chars.forEach((ch) => resultChars.add(ch));
+          if (!sub.nullable && !q.nullable) {
+            return { chars: resultChars, nullable: false };
+          }
+          pos = q.nextPos;
+          continue;
+        } else {
+          atomChars = new Set();
+          addChar(atomChars, c, ignoreCase);
+          nextPos = pos + 1;
+        }
+
+        const q = parseQuantifier(src, nextPos, end);
+        pos = q.nextPos;
+        if (isAssertion) continue;
+        if (isSpace) {
+          if (!q.nullable) return null;
+          continue;
+        }
+        if (atomChars) {
+          atomChars.forEach((ch) => resultChars.add(ch));
+        }
+        if (!q.nullable) {
+          return { chars: resultChars, nullable: false };
+        }
+      }
+      return { chars: resultChars, nullable: true };
+    };
+
+    const specificMap = Object.create(null);
+    for (let i = 0; i < rules.length; i++) {
+      const re = rules[i][0];
+      const src = re.source;
+      const ignoreCase = re.ignoreCase;
+      // 仅当顶层所有分支均锚定行首时才能按首字符分桶
+      let parsed = null;
+      if (src.startsWith('^')) {
+        let hasTopLevelPipe = false;
+        let depth = 0;
+        let inClass = false;
+        let escaped = false;
+        for (let k = 0; k < src.length; k++) {
+          const ch = src[k];
+          if (escaped) escaped = false;
+          else if (ch === '\\') escaped = true;
+          else if (inClass) { if (ch === ']') inClass = false; }
+          else if (ch === '[') inClass = true;
+          else if (ch === '(') depth++;
+          else if (ch === ')') depth--;
+          else if (ch === '|' && depth === 0) { hasTopLevelPipe = true; break; }
+        }
+        if (!hasTopLevelPipe) {
+          const seqRes = parseSeq(src, 1, src.length, ignoreCase);
+          if (seqRes && !seqRes.nullable && seqRes.chars.size > 0 && seqRes.chars.size <= 16) {
+            parsed = seqRes.chars;
+          }
+        }
+      }
+      if (!parsed) {
+        wildcardIndices.push(i);
+      } else {
+        parsed.forEach((ch) => {
+          if (!specificMap[ch]) specificMap[ch] = [];
+          specificMap[ch].push(i);
+        });
+      }
+    }
+
+    const keys = Object.keys(specificMap);
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      const merged = specificMap[k].concat(wildcardIndices);
+      merged.sort((a, b) => a - b);
+      const dedup = [];
+      for (let j = 0; j < merged.length; j++) {
+        if (j === 0 || merged[j] !== merged[j - 1]) dedup.push(merged[j]);
+      }
+      buckets[k] = dedup;
+    }
+
+    return { buckets, wildcardIndices };
+  }
+
+  const REGEX_INDEX = buildRegexBuckets(REGEX_RULES);
+
+  function getRegexBucketForKey(normalizedKey) {
+    if (!normalizedKey) return REGEX_INDEX.wildcardIndices;
+    const c = normalizedKey.charCodeAt(0);
+    let bucketKey;
+    if (c >= 48 && c <= 57) bucketKey = '0';
+    else if (c >= 65 && c <= 90) bucketKey = normalizedKey[0].toLowerCase();
+    else bucketKey = normalizedKey[0];
+    return REGEX_INDEX.buckets[bucketKey] || REGEX_INDEX.wildcardIndices;
   }
 
   function doTranslateText(str) {
@@ -6850,6 +7219,11 @@
     if (translateCache.has(trimmed)) {
       const cached = translateCache.get(trimmed);
       return cached === null ? null : str.replace(trimmed, () => cached);
+    }
+
+    if (normalizedKey.length > 800) {
+      setTranslateCache(trimmed, null);
+      return null;
     }
 
     const notApplyMatch = normalizedKey.match(
@@ -7030,8 +7404,9 @@
       }
     }
 
-    for (let i = 0; i < REGEX_RULES.length; i++) {
-      const [re, replacement] = REGEX_RULES[i];
+    const bucket = getRegexBucketForKey(normalizedKey);
+    for (let i = 0; i < bucket.length; i++) {
+      const [re, replacement] = REGEX_RULES[bucket[i]];
       if (re.test(normalizedKey)) {
         const res = normalizedKey.replace(re, replacement);
         setTranslateCache(trimmed, res);
@@ -7091,74 +7466,6 @@
     '#agy-zh-cn-settings-btn-dot'
   ].join(', ');
 
-  const SKIP_CLOSEST_SELECTOR = [
-    SKIP_CODE_SELECTOR,
-    '[data-lexical-editor="true"]',
-    '[contenteditable="true"]',
-    '[contenteditable="plaintext-only"]',
-    '[contenteditable=""]',
-    '[data-file-uri]',
-    '[data-uri]',
-    '[data-quotable-inline="true"]',
-
-    '[class*="diffEditor"]',
-    '[aria-label="File Viewer"]',
-    '[aria-label="文件查看器"]',
-    '[data-testid="user-message-bubble"]',
-    '[data-testid="user-message-media-scroll"]',
-    '[data-testid="user-message-content"]',
-    '[data-testid="user-input-step"] .whitespace-pre-wrap',
-    '[data-testid="planner-response-text"]',
-    '[data-testid="comment-card-text"]',
-    '[data-testid="entity-pill"]',
-    '[data-testid="file-title-name"]',
-    '[data-testid="subagent-tab-header-title"]',
-    '[data-testid="hover-card-title"]',
-    '[data-testid="webview-download-filename"]',
-    '[data-testid="breadcrumb-segment"]',
-    '[data-testid="project-header"]',
-    '[data-testid*="project-header"]',
-    '[data-testid="sidebar-project-header"]',
-    '[data-testid="workspace-title"]',
-    '[translate="no"]',
-    '.notranslate',
-    '.no-translate',
-    '[data-no-translate]',
-    '[data-no-i18n]',
-    '[data-plugin]',
-    '[data-plugin-id]',
-    '[data-extension-id]',
-    '[data-custom-plugin]',
-    '[data-external-plugin]',
-    '.agy-external-plugin',
-    '#agy-account-manager-btn',
-    '#agy-account-manager-popover',
-    '#agy-account-confirm-modal',
-    '#agy-account-switch-mask',
-    '[id^="agy-account-"]',
-    '[class*="agy-account-"]',
-    '[id*="account-manager"]',
-    '[class*="account-manager"]'
-  ].join(', ');
-
-  function isIconElement(el) {
-    if (!el || el.nodeType !== 1) return false;
-    if (el.hasAttribute('data-icon')) return true;
-    const cl = el.classList;
-    if (!cl) return false;
-    return (
-      cl.contains('material-symbols-outlined') ||
-      cl.contains('material-symbols-rounded') ||
-      cl.contains('material-symbols-sharp') ||
-      cl.contains('material-symbols') ||
-      cl.contains('material-icons') ||
-      cl.contains('material-icons-outlined') ||
-      cl.contains('material-icons-round') ||
-      cl.contains('material-icons-sharp') ||
-      cl.contains('codicon')
-    );
-  }
-
   const TOAST_SELECTOR =
     '[data-testid="toast-notification"], [data-notification-tag], [data-testid="nux-card"], [data-testid*="banner"], [data-testid*="announcement"], [role="status"], [role="alert"], .toast-viewport, [class*="toast-viewport"]';
   const TOOLBAR_SELECTOR = '[data-testid="user-message-actions"], [data-testid="cascade-system-message-toolbar"]';
@@ -7167,18 +7474,6 @@
   const CONV_ROW_SELECTOR = '[data-testid="conversation-row-sidebar"], [data-testid*="conversation-row"]';
   const FILE_TREE_SIDEBAR_SELECTOR = '[data-testid="tab-file-tree-sidebar"]';
   const FILE_TREE_ITEM_SELECTOR = '[role="treeitem"], [data-file-uri], [data-uri], [data-testid="file-title-name"]';
-  const COMMENT_EDITABLE_EXCLUSION_SELECTOR =
-    '[data-lexical-editor="true"], [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-testid="comment-card-text"]';
-
-  function isToastOrNotificationElement(el) {
-    if (!el || typeof el.closest !== 'function') return false;
-    return Boolean(el.closest(TOAST_SELECTOR));
-  }
-
-  function isActionToolbarElement(el) {
-    if (!el || typeof el.closest !== 'function') return false;
-    return Boolean(el.closest(TOOLBAR_SELECTOR));
-  }
 
   const COMMENT_UI_SELECTOR = [
     '[data-testid="comment-box"]',
@@ -7197,151 +7492,432 @@
     '[data-testid="image-comment-hint"]'
   ].join(', ');
 
+  const OWN_PLUGIN_UI_IDS = new Set([
+    'agy-zh-cn-settings-nav-item',
+    'agy-zh-cn-settings-nav-btn',
+    'agy-zh-cn-settings-panel',
+    'agy-zh-cn-settings-btn-dot',
+    'agy-zh-cn-sidebar-btn',
+    'agy-zh-cn-context-menu'
+  ]);
+  const TOAST_TIDS = new Set(['toast-notification', 'nux-card']);
+  const TOOLBAR_TIDS = new Set(['user-message-actions', 'cascade-system-message-toolbar']);
+  const COMMENT_UI_TIDS = new Set([
+    'comment-box',
+    'comment-card',
+    'selection-comment-button',
+    'selection-popup-quote-button',
+    'selection-code-search-button',
+    'html-selection-comment',
+    'html-selection-add-to-chat',
+    'selection-quote-button',
+    'selection-btw-button',
+    'pane-selection-add-to-chat',
+    'gutter-comment-button',
+    'image-comment-hint'
+  ]);
+  const MARKDOWN_PROTECTED_TIDS = new Set([
+    'planner-response-text',
+    'user-message-content',
+    'user-message-bubble',
+    'user-input-step'
+  ]);
+  const SKIP_CODE_TIDS = new Set(['terminal-container', 'terminal-view']);
+  const SKIP_GENERAL_TIDS = new Set([
+    'user-message-bubble',
+    'user-message-media-scroll',
+    'user-message-content',
+    'planner-response-text',
+    'comment-card-text',
+    'entity-pill',
+    'file-title-name',
+    'subagent-tab-header-title',
+    'hover-card-title',
+    'webview-download-filename',
+    'breadcrumb-segment',
+    'workspace-title',
+    'project-header',
+    'sidebar-project-header'
+  ]);
+  const ACCOUNT_MANAGER_IDS = new Set([
+    'agy-account-manager-btn',
+    'agy-account-manager-popover',
+    'agy-account-confirm-modal',
+    'agy-account-switch-mask'
+  ]);
+
+  const SKIP_CODE_CLASS_RE = /(?:^|\s)(?:monaco-editor|cm-editor|cm-content|cm-line|code-block|code-line|line-content|code-snippet|prism-code|shiki|hljs|xterm|katex|terminal)(?=\s|$)|font-mono|language-|token/i;
+  const SKIP_GENERAL_CLASS_RE = /(?:^|\s)(?:notranslate|no-translate|agy-external-plugin)(?=\s|$)|diffEditor|agy-account-|account-manager/;
+  const ICON_CLASS_RE = /(?:^|\s)(?:material-symbols(?:-outlined|-rounded|-sharp)?|material-icons(?:-outlined|-rounded|-sharp)?|codicon)(?=\s|$)/;
+  const COMMENT_UI_CLASS_RE = /(?:^|\s)(?:agy-selection-pill|selection-popup)(?=\s|$)/;
+  const TOAST_CLASS_RE = /toast-viewport/;
+
+  const M_SKIP_CODE = 1 << 0;
+  const M_SKIP_GENERAL = 1 << 1;
+  const M_EDITABLE = 1 << 2;
+  const M_ICON = 1 << 3;
+  const M_TOAST = 1 << 4;
+  const M_TOOLBAR = 1 << 5;
+  const M_COMMENT_UI = 1 << 6;
+  const M_FILE_TREE_SIDEBAR = 1 << 7;
+  const M_FILE_TREE_ITEM = 1 << 8;
+  const M_MARKDOWN_ROOT = 1 << 9;
+  const M_PROTECTED_MD = 1 << 10;
+  const M_CONV_ROW = 1 << 11;
+  const M_PROJECT_HEADER = 1 << 12;
+  const M_FILE_VIEWER = 1 << 13;
+  const M_USER_INPUT_STEP = 1 << 14;
+  const M_COMMENT_CARD_TEXT = 1 << 15;
+  const M_OWN_UI = 1 << 16;
+  const M_EXTERNAL_PLUGIN = 1 << 17;
+  const M_BUTTON = 1 << 18;
+  const M_FONT_MONO = 1 << 19;
+  const M_WHITE_SPACE_PRE = 1 << 20;
+  const M_CODE_LINE = 1 << 21;
+
+  function classifyClassString(cls) {
+    let mask = 0;
+    if (!cls) return 0;
+    if (SKIP_CODE_CLASS_RE.test(cls)) {
+      mask |= M_SKIP_CODE;
+      if (cls.includes('font-mono') || cls.includes('FONT-MONO')) mask |= M_FONT_MONO;
+      if (/(?:^|\s)code-line(?=\s|$)/.test(cls)) mask |= M_CODE_LINE;
+    }
+    if (SKIP_GENERAL_CLASS_RE.test(cls)) mask |= M_SKIP_GENERAL;
+    if (ICON_CLASS_RE.test(cls)) mask |= M_ICON;
+    if (COMMENT_UI_CLASS_RE.test(cls)) mask |= M_COMMENT_UI;
+    if (TOAST_CLASS_RE.test(cls)) mask |= M_TOAST;
+    return mask;
+  }
+
+  function classifySingleElement(el) {
+    let mask = 0;
+    const tag = el.tagName;
+    if (tag === 'BUTTON') mask |= M_BUTTON;
+    else if (tag === 'PRE' || tag === 'CODE' || tag === 'KBD' || tag === 'SAMP') mask |= M_SKIP_CODE;
+
+    const attrs = el.attributes;
+    const len = attrs ? attrs.length : 0;
+    if (len === 0) return mask;
+
+    // 绝大多数布局节点仅有单个 class 属性，走免属性遍历快路径
+    if (len === 1 && attrs[0].name === 'class') {
+      return mask | classifyClassString(attrs[0].value);
+    }
+
+    for (let i = 0; i < len; i++) {
+      const a = attrs[i];
+      const name = a.name;
+      const val = a.value;
+      switch (name) {
+        case 'class':
+          mask |= classifyClassString(val);
+          break;
+        case 'id':
+          if (OWN_PLUGIN_UI_IDS.has(val)) {
+            mask |= M_OWN_UI | M_SKIP_CODE;
+          } else if (
+            val === 'ag-pulse-status-bar' ||
+            ACCOUNT_MANAGER_IDS.has(val) ||
+            val.startsWith('agy-account-') ||
+            val.includes('account-manager')
+          ) {
+            mask |= M_SKIP_GENERAL | M_EXTERNAL_PLUGIN;
+          }
+          break;
+        case 'data-testid':
+          if (val === 'tab-file-tree-sidebar') {
+            mask |= M_FILE_TREE_SIDEBAR;
+          } else if (val === 'file-title-name') {
+            mask |= M_FILE_TREE_ITEM | M_SKIP_GENERAL;
+          } else if (val === 'user-input-step') {
+            mask |= M_USER_INPUT_STEP | M_PROTECTED_MD;
+          } else if (val === 'comment-card-text') {
+            mask |= M_COMMENT_CARD_TEXT | M_SKIP_GENERAL;
+          } else {
+            if (TOAST_TIDS.has(val) || val.includes('banner') || val.includes('announcement')) mask |= M_TOAST;
+            if (TOOLBAR_TIDS.has(val)) mask |= M_TOOLBAR;
+            if (COMMENT_UI_TIDS.has(val)) mask |= M_COMMENT_UI;
+            if (MARKDOWN_PROTECTED_TIDS.has(val)) mask |= M_PROTECTED_MD;
+            if (val === 'project-header' || val === 'sidebar-project-header' || val.includes('project-header')) {
+              mask |= M_PROJECT_HEADER | M_SKIP_GENERAL;
+            }
+            if (val === 'conversation-row-sidebar' || val.includes('conversation-row')) mask |= M_CONV_ROW;
+            if (SKIP_CODE_TIDS.has(val)) mask |= M_SKIP_CODE;
+            if (SKIP_GENERAL_TIDS.has(val)) mask |= M_SKIP_GENERAL;
+          }
+          break;
+        case 'role':
+          if (val === 'button') mask |= M_BUTTON;
+          else if (val === 'treeitem') mask |= M_FILE_TREE_ITEM;
+          else if (val === 'status' || val === 'alert') mask |= M_TOAST;
+          break;
+        case 'contenteditable':
+          if (val === '' || val === 'true' || val === 'plaintext-only') mask |= M_EDITABLE;
+          break;
+        case 'data-lexical-editor':
+          if (val === 'true') mask |= M_EDITABLE;
+          break;
+        case 'data-icon':
+          mask |= M_ICON;
+          break;
+        case 'data-markdown-root':
+          mask |= M_MARKDOWN_ROOT;
+          break;
+        case 'data-notification-tag':
+          mask |= M_TOAST;
+          break;
+        case 'data-language':
+        case 'data-syntax':
+        case 'data-code-block':
+          mask |= M_SKIP_CODE;
+          break;
+        case 'data-file-uri':
+        case 'data-uri':
+          mask |= M_FILE_TREE_ITEM | M_SKIP_GENERAL;
+          break;
+        case 'data-quotable-inline':
+          if (val === 'true') mask |= M_SKIP_GENERAL;
+          break;
+        case 'aria-label':
+          if (val === 'File Viewer' || val === '文件查看器') {
+            mask |= M_FILE_VIEWER | M_PROTECTED_MD | M_SKIP_GENERAL;
+          }
+          break;
+        case 'translate':
+          if (val === 'no') mask |= M_SKIP_GENERAL;
+          break;
+        case 'data-no-translate':
+        case 'data-no-i18n':
+          mask |= M_SKIP_GENERAL;
+          break;
+        case 'data-plugin':
+        case 'data-plugin-id':
+        case 'data-extension-id':
+        case 'data-custom-plugin':
+        case 'data-external-plugin':
+        case 'data-ag-pulse-bar':
+        case 'data-pulse-widget':
+          mask |= M_SKIP_GENERAL | M_EXTERNAL_PLUGIN;
+          break;
+        case 'style':
+          if (val.includes('pre') && el.style && (el.style.whiteSpace === 'pre' || el.style.whiteSpace === 'pre-wrap')) {
+            mask |= M_WHITE_SPACE_PRE;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+    return mask;
+  }
+
+  function isIconElement(el) {
+    if (!el || el.nodeType !== 1) return false;
+    return Boolean(classifySingleElement(el) & M_ICON);
+  }
+
+  function isToastOrNotificationElement(el) {
+    let cur = el;
+    while (cur && cur.nodeType === 1) {
+      if (classifySingleElement(cur) & M_TOAST) return true;
+      cur = cur.parentElement;
+    }
+    return false;
+  }
+
+  function isActionToolbarElement(el) {
+    let cur = el;
+    while (cur && cur.nodeType === 1) {
+      if (classifySingleElement(cur) & M_TOOLBAR) return true;
+      cur = cur.parentElement;
+    }
+    return false;
+  }
+
   function isCommentUiElement(el) {
-    if (!el || typeof el.closest !== 'function') return false;
-    if (!el.closest(COMMENT_UI_SELECTOR)) return false;
-    if (
-      el.isContentEditable ||
-      el.getAttribute('contenteditable') === 'true' ||
-      el.getAttribute('contenteditable') === 'plaintext-only' ||
-      el.getAttribute('contenteditable') === '' ||
-      el.getAttribute('data-lexical-editor') === 'true'
-    ) {
-      return false;
+    if (!el || el.nodeType !== 1) return false;
+    let cur = el;
+    let foundCommentUi = false;
+    while (cur && cur.nodeType === 1) {
+      const m = classifySingleElement(cur);
+      if (m & (M_EDITABLE | M_COMMENT_CARD_TEXT)) return false;
+      if (m & M_COMMENT_UI) foundCommentUi = true;
+      cur = cur.parentElement;
     }
-    if (el.closest(COMMENT_EDITABLE_EXCLUSION_SELECTOR)) {
-      return false;
-    }
-    return true;
+    return foundCommentUi;
   }
 
   function isFileTreeSidebarHeaderElement(el) {
-    if (!el || typeof el.closest !== 'function') return false;
-    if (!el.closest(FILE_TREE_SIDEBAR_SELECTOR)) return false;
-    if (el.closest(FILE_TREE_ITEM_SELECTOR)) return false;
-    return Boolean(el.closest('button, [role="button"]'));
+    if (!el || el.nodeType !== 1) return false;
+    let cur = el;
+    let inSidebar = false;
+    let inButton = false;
+    while (cur && cur.nodeType === 1) {
+      const m = classifySingleElement(cur);
+      if (m & M_FILE_TREE_ITEM) return false;
+      if (m & M_BUTTON) inButton = true;
+      if (m & M_FILE_TREE_SIDEBAR) inSidebar = true;
+      cur = cur.parentElement;
+    }
+    return inSidebar && inButton;
   }
 
-  const MARKDOWN_PROTECTED_ANCESTOR = [
-    '[data-testid="planner-response-text"]',
-    '[data-testid="user-message-content"]',
-    '[data-testid="user-message-bubble"]',
-    '[data-testid="user-input-step"]',
-    '[aria-label="File Viewer"]',
-    '[aria-label="文件查看器"]'
-  ].join(', ');
-
   function isProtectedMarkdownContext(el) {
-    if (!el || typeof el.closest !== 'function') return false;
-    if (!el.closest('[data-markdown-root]')) return false;
-    if (el.closest(SKIP_CODE_SELECTOR)) return true;
-    return Boolean(el.closest(MARKDOWN_PROTECTED_ANCESTOR));
+    if (!el || el.nodeType !== 1) return false;
+    let cur = el;
+    let inMdRoot = false;
+    let inCode = false;
+    let inProtected = false;
+    while (cur && cur.nodeType === 1) {
+      const m = classifySingleElement(cur);
+      if (m & M_MARKDOWN_ROOT) inMdRoot = true;
+      if (m & M_SKIP_CODE) inCode = true;
+      if (m & M_PROTECTED_MD) inProtected = true;
+      cur = cur.parentElement;
+    }
+    return inMdRoot && (inCode || inProtected);
   }
 
   function isOwnPluginUiElement(el) {
     if (!el || el.nodeType !== 1) return false;
-    const id = el.id;
-    return (
-      id === 'agy-zh-cn-settings-nav-item' ||
-      id === 'agy-zh-cn-settings-nav-btn' ||
-      id === 'agy-zh-cn-settings-panel' ||
-      id === 'agy-zh-cn-settings-btn-dot' ||
-      id === 'agy-zh-cn-sidebar-btn' ||
-      id === 'agy-zh-cn-context-menu'
-    );
+    return OWN_PLUGIN_UI_IDS.has(el.id);
+  }
+
+  function isActiveEditableBlocking(el, allowFormAttr) {
+    if (allowFormAttr) return false;
+    const active = getActiveEditableElement();
+    return Boolean(active && (active === el || (typeof active.contains === 'function' && active.contains(el))));
   }
 
   function shouldSkipElement(el, options) {
     if (!el || el.nodeType !== 1) return true;
-    const allowFormAttr = Boolean(options && (options.allowInputAttr || options.allowTextareaAttr) && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT'));
+    const allowFormAttr = Boolean(
+      options && (options.allowInputAttr || options.allowTextareaAttr) && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')
+    );
     if (SKIP_TAGS.has(el.tagName) && !(allowFormAttr && el.tagName === 'TEXTAREA')) return true;
-    if (isOwnPluginUiElement(el)) return true;
-    if (
-      el.isContentEditable ||
-      el.getAttribute('contenteditable') === 'true' ||
-      el.getAttribute('contenteditable') === 'plaintext-only' ||
-      el.getAttribute('contenteditable') === '' ||
-      el.getAttribute('data-lexical-editor') === 'true'
-    ) {
-      return true;
+
+    const selfMask = classifySingleElement(el);
+    if (selfMask & (M_OWN_UI | M_EDITABLE)) return true;
+    if (isActiveEditableBlocking(el, allowFormAttr)) return true;
+
+    const selfIcon = Boolean(selfMask & M_ICON);
+    const selfWhiteSpacePre = Boolean(selfMask & M_WHITE_SPACE_PRE);
+    const selfHasWhitespacePreWrap = el.classList ? el.classList.contains('whitespace-pre-wrap') : false;
+
+    let inToast = false;
+    let inToolbar = false;
+    let inCommentUi = false;
+    let commentExclusion = false;
+    let codeSeenDepth = -1;
+    let codeInsideCommentUi = false;
+    let inFileTreeSidebar = false;
+    let inFileTreeItem = false;
+    let inButton = false;
+    let inProjectHeader = false;
+    let inMarkdownRoot = false;
+    let inProtectedMd = false;
+    let inSkipCode = false;
+    let inSkipGeneral = false;
+    let inFontMono = false;
+    let inUserInputStep = false;
+    let depth = 0;
+
+    let cur = el;
+    while (cur) {
+      if (cur.nodeType === 1) {
+        const m = cur === el ? selfMask : classifySingleElement(cur);
+        if (m & M_EDITABLE) return true;
+        if (m & M_TOAST) inToast = true;
+        if (m & M_TOOLBAR) inToolbar = true;
+        if (m & M_COMMENT_CARD_TEXT) commentExclusion = true;
+        if (m & M_SKIP_CODE) {
+          inSkipCode = true;
+          if (codeSeenDepth === -1) codeSeenDepth = depth;
+        }
+        if (m & M_FONT_MONO) inFontMono = true;
+        if (m & M_COMMENT_UI) {
+          inCommentUi = true;
+          if (codeSeenDepth !== -1) codeInsideCommentUi = true;
+        }
+        if (m & M_FILE_TREE_ITEM) inFileTreeItem = true;
+        if (m & M_BUTTON) inButton = true;
+        if (m & M_FILE_TREE_SIDEBAR) inFileTreeSidebar = true;
+        if (m & M_PROJECT_HEADER) inProjectHeader = true;
+        if (m & M_MARKDOWN_ROOT) inMarkdownRoot = true;
+        if (m & M_PROTECTED_MD) inProtectedMd = true;
+        if (m & M_SKIP_GENERAL) inSkipGeneral = true;
+        if (m & M_USER_INPUT_STEP) inUserInputStep = true;
+        depth++;
+        cur = cur.parentElement;
+        if (!cur) {
+          const root = typeof el.getRootNode === 'function' ? el.getRootNode() : null;
+          if (root && root.host && root.host !== el) {
+            return shouldSkipElement(root.host, options) ? true : false;
+          }
+          break;
+        }
+        if (cur === document.body || cur === document.documentElement) {
+          break;
+        }
+      } else {
+        break;
+      }
     }
 
-    const active = typeof document !== 'undefined' ? document.activeElement : null;
-    if (
-      !allowFormAttr &&
-      active &&
-      (active.isContentEditable ||
-        active.tagName === 'INPUT' ||
-        active.tagName === 'TEXTAREA' ||
-        (active.getAttribute && active.getAttribute('data-lexical-editor') === 'true')) &&
-      (active === el || (typeof active.contains === 'function' && active.contains(el)))
-    ) {
-      return true;
+    if (inToast) {
+      return inSkipCode || selfIcon;
     }
-
-    const isToastOrNotification = isToastOrNotificationElement(el);
-    if (isToastOrNotification) {
-      if (el.closest(SKIP_CODE_SELECTOR)) {
-        return true;
-      }
-      if (isIconElement(el)) {
-        return true;
-      }
-      return false;
+    if (inToolbar) {
+      return selfIcon;
     }
-
-    const isActionToolbar = isActionToolbarElement(el);
-    if (isActionToolbar) {
-      if (isIconElement(el)) {
-        return true;
-      }
-      return false;
+    if (inCommentUi && !commentExclusion) {
+      return codeInsideCommentUi || selfIcon;
     }
-
-    if (isCommentUiElement(el)) {
-      const codeAncestor = el.closest(SKIP_CODE_SELECTOR);
-      if (codeAncestor && codeAncestor.closest(COMMENT_UI_SELECTOR)) {
-        return true;
-      }
-      if (isIconElement(el)) {
-        return true;
-      }
-      return false;
+    if (inFileTreeSidebar && !inFileTreeItem && inButton) {
+      return selfIcon;
     }
-
-    if (isFileTreeSidebarHeaderElement(el)) {
-      if (isIconElement(el)) {
-        return true;
-      }
-      return false;
-    }
-
-    if (el.closest && el.closest('[data-testid="project-header"], [data-testid*="project-header"], [data-testid="sidebar-project-header"]')) {
-      return true;
-    }
-    if (isProtectedMarkdownContext(el)) {
-      return true;
-    }
-    if (!(options && options.skipClosestChecked) && el.closest && el.closest(SKIP_CLOSEST_SELECTOR)) {
-      return true;
-    }
-    const className = typeof el.className === 'string' ? el.className : (el.getAttribute && el.getAttribute('class')) || '';
-    if (/\b(?:font-mono|code-block|code-line|code-snippet|prism-code|hljs)\b/i.test(className)) {
-      return true;
-    }
-    if (el.style && (el.style.whiteSpace === 'pre' || el.style.whiteSpace === 'pre-wrap')) {
-      if (/\bfont-mono\b/i.test(className) || (el.closest && el.closest('.font-mono, [class*="font-mono"]'))) {
-        return true;
-      }
-    }
-    if (isIconElement(el)) {
-      return true;
-    }
-    const root = typeof el.getRootNode === 'function' ? el.getRootNode() : null;
-    if (root && root.host && shouldSkipElement(root.host, options)) {
-      return true;
-    }
+    if (inProjectHeader) return true;
+    if (inMarkdownRoot && (inSkipCode || inProtectedMd)) return true;
+    if (selfHasWhitespacePreWrap && inUserInputStep) return true;
+    if (!(options && options.skipClosestChecked) && (inSkipCode || inSkipGeneral)) return true;
+    if (selfMask & M_SKIP_CODE) return true;
+    if (selfWhiteSpacePre && inFontMono) return true;
+    if (selfIcon) return true;
     return false;
+  }
+
+  const F_TOAST = 1 << 0;
+  const F_TOOLBAR = 1 << 1;
+  const F_COMMENT_UI = 1 << 2;
+  const F_MARKDOWN_ROOT = 1 << 3;
+  const F_PROTECTED_MD = 1 << 4;
+  const F_CONV_ROW = 1 << 5;
+  const F_FILE_TREE_SIDEBAR = 1 << 6;
+  const F_FILE_TREE_ITEM = 1 << 7;
+  const F_IN_BUTTON = 1 << 8;
+  const F_USER_INPUT_STEP = 1 << 9;
+  const F_EDITABLE = 1 << 10;
+
+  function resolveAncestryFlags(startEl) {
+    let flags = 0;
+    let cur = startEl;
+    while (cur && cur.nodeType === 1) {
+      const m = classifySingleElement(cur);
+      if (m & M_TOAST) flags |= F_TOAST;
+      if (m & M_TOOLBAR) flags |= F_TOOLBAR;
+      if (m & M_COMMENT_UI) flags |= F_COMMENT_UI;
+      if (m & M_MARKDOWN_ROOT) flags |= F_MARKDOWN_ROOT;
+      if (m & M_PROTECTED_MD) flags |= F_PROTECTED_MD;
+      if (m & M_CONV_ROW) flags |= F_CONV_ROW;
+      if (m & M_FILE_TREE_SIDEBAR) flags |= F_FILE_TREE_SIDEBAR;
+      if (m & M_FILE_TREE_ITEM) flags |= F_FILE_TREE_ITEM;
+      if (m & M_BUTTON) flags |= F_IN_BUTTON;
+      if (m & M_USER_INPUT_STEP) flags |= F_USER_INPUT_STEP;
+      if (m & M_EDITABLE) flags |= F_EDITABLE;
+      cur = cur.parentElement;
+    }
+    return flags;
   }
 
   const ATTR_LIST = ['placeholder', 'title', 'aria-label'];
@@ -7606,7 +8182,90 @@
     }
   }
 
-  const CODE_CLASS_RE = /\b(?:font-mono|code-block|code-line|code-snippet|prism-code|hljs)\b/i;
+  function getActiveEditableElement() {
+    const rawActive = typeof document !== 'undefined' ? document.activeElement : null;
+    if (!rawActive) return null;
+    if (
+      rawActive.tagName === 'INPUT' ||
+      rawActive.tagName === 'TEXTAREA' ||
+      Boolean(classifySingleElement(rawActive) & M_EDITABLE) ||
+      rawActive.isContentEditable
+    ) {
+      return rawActive;
+    }
+    return null;
+  }
+
+  let evalNextFlags = 0;
+  let evalSkipOwnText = false;
+
+  // 同步与异步增量遍历共用的单节点准入与状态继承判定
+  function evaluateElementInWalk(el, flags, activeEditable) {
+    const tag = el.tagName;
+    if (tag === 'TEXTAREA' || tag === 'INPUT') {
+      processAttributes(el);
+      return false;
+    }
+    if (SKIP_TAGS.has(tag)) return false;
+    if (el === activeEditable) return false;
+
+    const m = classifySingleElement(el);
+    if (m & (M_OWN_UI | M_EDITABLE)) return false;
+    if (flags & F_EDITABLE) return false;
+    if (m & M_COMMENT_CARD_TEXT) return false;
+    if ((flags & F_USER_INPUT_STEP) && el.classList && el.classList.contains('whitespace-pre-wrap')) {
+      return false;
+    }
+
+    let nextFlags = flags;
+    if (m & M_TOAST) nextFlags |= F_TOAST;
+    if (m & M_TOOLBAR) nextFlags |= F_TOOLBAR;
+    if (m & M_COMMENT_UI) nextFlags |= F_COMMENT_UI;
+    if (m & M_MARKDOWN_ROOT) nextFlags |= F_MARKDOWN_ROOT;
+    if (m & M_PROTECTED_MD) nextFlags |= F_PROTECTED_MD;
+    if (m & M_CONV_ROW) nextFlags |= F_CONV_ROW;
+    if (m & M_FILE_TREE_SIDEBAR) nextFlags |= F_FILE_TREE_SIDEBAR;
+    if (m & M_FILE_TREE_ITEM) nextFlags |= F_FILE_TREE_ITEM;
+    if (m & M_BUTTON) nextFlags |= F_IN_BUTTON;
+    if (m & M_USER_INPUT_STEP) nextFlags |= F_USER_INPUT_STEP;
+
+    const inSpecialContext = Boolean(nextFlags & (F_TOAST | F_TOOLBAR | F_COMMENT_UI));
+    if (inSpecialContext) {
+      if (m & M_SKIP_CODE) return false;
+    } else if ((nextFlags & F_FILE_TREE_SIDEBAR) && !(nextFlags & F_FILE_TREE_ITEM) && (nextFlags & F_IN_BUTTON)) {
+      // 文件树侧边栏非条目区按钮允许翻译
+    } else {
+      if (m & M_FILE_VIEWER) {
+        translateFileTreeSidebarHeaders(el);
+        translateCommentUiRoots(el);
+        return false;
+      }
+      if (
+        (m & (M_PROJECT_HEADER | M_SKIP_GENERAL | M_SKIP_CODE)) ||
+        ((nextFlags & F_MARKDOWN_ROOT) && (nextFlags & F_PROTECTED_MD))
+      ) {
+        if (el.childElementCount > 0 && !(m & (M_CODE_LINE | M_EXTERNAL_PLUGIN | M_OWN_UI))) {
+          translateCommentUiRoots(el);
+          translateFileTreeSidebarHeaders(el);
+        }
+        return false;
+      }
+    }
+
+    if (m & M_ICON) {
+      if (el.firstElementChild) {
+        evalNextFlags = nextFlags;
+        evalSkipOwnText = true;
+        return true;
+      }
+      return false;
+    }
+
+    processAttributes(el, { skipChecked: true });
+    evalNextFlags = nextFlags;
+    evalSkipOwnText = false;
+    return Boolean(el.firstChild);
+  }
 
   function walkAndTranslate(root) {
     if (!root) return;
@@ -7616,15 +8275,8 @@
     }
     if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
 
-    const rawActive = typeof document !== 'undefined' ? document.activeElement : null;
-    const activeEditable =
-      rawActive &&
-      (rawActive.isContentEditable ||
-        rawActive.tagName === 'INPUT' ||
-        rawActive.tagName === 'TEXTAREA' ||
-        (rawActive.getAttribute && rawActive.getAttribute('data-lexical-editor') === 'true'))
-        ? rawActive
-        : null;
+    const activeEditable = getActiveEditableElement();
+    let initFlags = 0;
 
     if (root.nodeType === 1) {
       if (root.tagName === 'TEXTAREA' || root.tagName === 'INPUT') {
@@ -7632,108 +8284,51 @@
         return;
       }
       if (shouldSkipElement(root)) {
-        translateCommentUiRoots(root);
-        translateFileTreeSidebarHeaders(root);
+        if (root.childElementCount > 0 && !isOwnPluginUiElement(root)) {
+          translateCommentUiRoots(root);
+          translateFileTreeSidebarHeaders(root);
+        }
         return;
       }
       if (activeEditable && (root === activeEditable || (typeof activeEditable.contains === 'function' && activeEditable.contains(root)))) {
         return;
       }
       processAttributes(root, { skipChecked: true });
+      initFlags = resolveAncestryFlags(root);
     } else if (root.host && shouldSkipElement(root.host)) {
       return;
     }
 
-    const initToast = root.nodeType === 1 ? isToastOrNotificationElement(root) : false;
-    const initToolbar = root.nodeType === 1 ? isActionToolbarElement(root) : false;
-    const initCommentUi = root.nodeType === 1 ? isCommentUiElement(root) : false;
-    const initMarkdownRoot = root.nodeType === 1 && root.closest ? Boolean(root.closest('[data-markdown-root]')) : false;
-    const initProtectedMd = root.nodeType === 1 && root.closest ? Boolean(root.closest(MARKDOWN_PROTECTED_ANCESTOR)) : false;
-    const initConvRow = root.nodeType === 1 && root.closest ? Boolean(root.closest(CONV_ROW_SELECTOR)) : false;
+    const syncTextCtx = { skipChecked: true, inMarkdownRoot: false, inConvRow: false, inCommentUi: false };
 
-    const visitChildren = (parent, inToast, inToolbar, inCommentUi, inMarkdownRoot, inProtectedMd, inConvRow, skipOwnText) => {
-      if (!skipOwnText && currentLang === 'zh-CN' && parent.nodeType === 1 && !(inMarkdownRoot && !inCommentUi)) {
+    const visitChildren = (parent, flags, skipOwnText) => {
+      if (!skipOwnText && currentLang === 'zh-CN' && parent.nodeType === 1 && !((flags & F_MARKDOWN_ROOT) && !(flags & F_COMMENT_UI))) {
         if (parent.childElementCount === 0 && parent.childNodes.length > 1 && tryTranslateCompoundTextNodes(parent)) {
           return;
         }
       }
-      const textCtx = {
-        skipChecked: true,
-        inMarkdownRoot,
-        inConvRow,
-        inCommentUi
-      };
+      const inMd = Boolean(flags & F_MARKDOWN_ROOT);
+      const inConv = Boolean(flags & F_CONV_ROW);
+      const inComment = Boolean(flags & F_COMMENT_UI);
       for (let child = parent.firstChild; child; child = child.nextSibling) {
         if (child.nodeType === 3) {
           if (!skipOwnText) {
-            processTextNode(child, textCtx);
+            syncTextCtx.inMarkdownRoot = inMd;
+            syncTextCtx.inConvRow = inConv;
+            syncTextCtx.inCommentUi = inComment;
+            processTextNode(child, syncTextCtx);
           }
         } else if (child.nodeType === 1) {
-          visitElement(child, inToast, inToolbar, inCommentUi, inMarkdownRoot, inProtectedMd, inConvRow);
+          if (evaluateElementInWalk(child, flags, activeEditable)) {
+            const childFlags = evalNextFlags;
+            const childSkipText = evalSkipOwnText;
+            visitChildren(child, childFlags, childSkipText);
+          }
         }
       }
     };
 
-    const visitElement = (el, inToast, inToolbar, inCommentUi, inMarkdownRoot, inProtectedMd, inConvRow) => {
-      if (isOwnPluginUiElement(el)) return;
-      const tag = el.tagName;
-      if (tag === 'TEXTAREA' || tag === 'INPUT') {
-        processAttributes(el);
-        return;
-      }
-      if (SKIP_TAGS.has(tag)) return;
-      if (
-        el === activeEditable ||
-        el.isContentEditable ||
-        el.getAttribute('contenteditable') === 'true' ||
-        el.getAttribute('contenteditable') === 'plaintext-only' ||
-        el.getAttribute('contenteditable') === '' ||
-        el.getAttribute('data-lexical-editor') === 'true'
-      ) {
-        return;
-      }
-
-      const nextToast = inToast || el.matches(TOAST_SELECTOR);
-      const nextToolbar = inToolbar || el.matches(TOOLBAR_SELECTOR);
-      if (el.matches('[data-testid="comment-card-text"]')) return;
-      const nextCommentUi = inCommentUi || el.matches(COMMENT_UI_SELECTOR);
-      const nextMarkdownRoot = inMarkdownRoot || el.hasAttribute('data-markdown-root');
-      const nextProtectedMd = inProtectedMd || el.matches(MARKDOWN_PROTECTED_ANCESTOR);
-      const nextConvRow = inConvRow || el.matches(CONV_ROW_SELECTOR);
-
-      if (nextToast || nextToolbar || nextCommentUi) {
-        if (el.matches(SKIP_CODE_SELECTOR)) return;
-      } else {
-        if (el.matches('[aria-label="File Viewer"], [aria-label="文件查看器"]')) {
-          translateFileTreeSidebarHeaders(el);
-          return;
-        }
-        if (
-          el.matches(PROJECT_HEADER_SELECTOR) ||
-          (nextMarkdownRoot && nextProtectedMd) ||
-          el.matches(SKIP_CLOSEST_SELECTOR)
-        ) {
-          return;
-        }
-        const className = typeof el.className === 'string' ? el.className : el.getAttribute('class') || '';
-        if (className && CODE_CLASS_RE.test(className)) return;
-      }
-
-      if (isIconElement(el)) {
-        if (el.firstElementChild) {
-          visitChildren(el, nextToast, nextToolbar, nextCommentUi, nextMarkdownRoot, nextProtectedMd, nextConvRow, true);
-        }
-        return;
-      }
-
-      processAttributes(el, { skipChecked: true });
-      if (el.firstChild) {
-        visitChildren(el, nextToast, nextToolbar, nextCommentUi, nextMarkdownRoot, nextProtectedMd, nextConvRow, false);
-      }
-    };
-
-    visitChildren(root, initToast, initToolbar, initCommentUi, initMarkdownRoot, initProtectedMd, initConvRow, false);
-    translateCommentUiRoots(root);
+    visitChildren(root, initFlags, false);
     if (root === document.body || root === document.documentElement) {
       translateFileTreeSidebarHeaders(root);
       sanitizeBrandAndWorkspaceHeaders();
@@ -7904,38 +8499,7 @@
   function scheduleChunkedBodyWalk() {
     if (typeof document === 'undefined' || !document.body) return;
     pendingPostWalkSanitize = true;
-    const queue = [{ node: document.body, depth: 0 }];
-    let guard = 0;
-    while (queue.length > 0 && guard < 400) {
-      guard++;
-      const { node: cur, depth } = queue.shift();
-      if (!cur || !cur.isConnected) continue;
-      if (cur.nodeType === 1 && !isOwnPluginUiElement(cur)) {
-        if (depth < 4 && cur.children && cur.children.length > 0) {
-          if (cur !== document.body && shouldSkipElement(cur)) {
-            translateCommentUiRoots(cur);
-            translateFileTreeSidebarHeaders(cur);
-            continue;
-          }
-          processAttributes(cur);
-          const children = cur.childNodes;
-          for (let i = 0; i < children.length; i++) {
-            const child = children[i];
-            if (child.nodeType === 1) {
-              queue.push({ node: child, depth: depth + 1 });
-            } else if (child.nodeType === 3 && child.nodeValue && child.nodeValue.trim()) {
-              pendingNodes.add(child);
-            }
-          }
-          continue;
-        }
-      }
-      pendingNodes.add(cur);
-    }
-    for (let i = 0; i < queue.length; i++) {
-      pendingNodes.add(queue[i].node);
-    }
-    scheduleRafFlush();
+    scheduleWalk(document.body);
   }
 
   function restoreAllToEnglish() {
@@ -7966,10 +8530,22 @@
   }
 
   let pendingNodes = new Set();
+  let pendingAttrElements = new Set();
+  const walkStackNodes = [];
+  const walkStackFlags = [];
+  const walkTextCtx = { skipChecked: true, inMarkdownRoot: false, inConvRow: false, inCommentUi: false };
   let rafScheduled = false;
   let rafId = null;
   let flushTimerId = null;
   let pendingPostWalkSanitize = false;
+
+  function clearPendingQueues() {
+    pendingNodes.clear();
+    pendingAttrElements.clear();
+    walkStackNodes.length = 0;
+    walkStackFlags.length = 0;
+    pendingPostWalkSanitize = false;
+  }
 
   function cancelScheduledFlush() {
     if (rafId !== null && typeof window.cancelAnimationFrame === 'function') {
@@ -7982,7 +8558,10 @@
     }
     rafScheduled = false;
   }
-  state.cancelFlush = cancelScheduledFlush;
+  state.cancelFlush = () => {
+    cancelScheduledFlush();
+    clearPendingQueues();
+  };
 
   function pruneAncestorNodes(nodes) {
     if (nodes.length <= 1) return nodes;
@@ -8005,34 +8584,121 @@
     return pruned;
   }
 
+  function pushChildNodesToWalkStack(parent, childFlags, skipOwnText) {
+    if (
+      !skipOwnText &&
+      parent.nodeType === 1 &&
+      parent.childElementCount === 0 &&
+      parent.childNodes.length > 1 &&
+      !((childFlags & F_MARKDOWN_ROOT) && !(childFlags & F_COMMENT_UI)) &&
+      tryTranslateCompoundTextNodes(parent)
+    ) {
+      return;
+    }
+    for (let child = parent.lastChild; child; child = child.previousSibling) {
+      if (child.nodeType === 3) {
+        if (!skipOwnText) {
+          walkStackNodes.push(child);
+          walkStackFlags.push(childFlags);
+        }
+      } else if (child.nodeType === 1) {
+        walkStackNodes.push(child);
+        walkStackFlags.push(childFlags);
+      }
+    }
+  }
+
   function flushPending() {
     if (!rafScheduled) return;
     cancelScheduledFlush();
     if (state.instanceId !== instanceId || currentLang !== 'zh-CN') {
-      pendingNodes.clear();
-      pendingPostWalkSanitize = false;
+      clearPendingQueues();
       return;
     }
-    const batch = pruneAncestorNodes(Array.from(pendingNodes));
-    pendingNodes.clear();
+
     const startTs = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-    let idx = 0;
-    while (idx < batch.length) {
-      walkAndTranslate(batch[idx]);
-      idx++;
-      if (idx < batch.length) {
-        const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-        if (now - startTs >= 6 || idx >= 200) {
-          for (let rest = idx; rest < batch.length; rest++) {
-            pendingNodes.add(batch[rest]);
+    let processed = 0;
+
+    if (pendingAttrElements.size > 0) {
+      for (const el of pendingAttrElements) {
+        pendingAttrElements.delete(el);
+        if (el && el.isConnected) {
+          processAttributes(el);
+        }
+        processed++;
+        if ((processed & 31) === 0) {
+          const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+          if (now - startTs >= 6) {
+            scheduleRafFlush();
+            return;
           }
-          scheduleRafFlush();
-          break;
         }
       }
     }
-    if (pendingNodes.size === 0 && pendingPostWalkSanitize) {
+
+    if (pendingNodes.size > 0) {
+      const batch = pruneAncestorNodes(Array.from(pendingNodes));
+      pendingNodes.clear();
+      for (let i = batch.length - 1; i >= 0; i--) {
+        walkStackNodes.push(batch[i]);
+        walkStackFlags.push(-1);
+      }
+    }
+
+    const activeEditable = getActiveEditableElement();
+    while (walkStackNodes.length > 0) {
+      const node = walkStackNodes.pop();
+      const flags = walkStackFlags.pop();
+      if (!node || !node.isConnected) continue;
+
+      if (flags === -1) {
+        if (node.nodeType === 3) {
+          processTextNode(node);
+        } else if (node.nodeType === 1) {
+          if (node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') {
+            processAttributes(node);
+          } else if (shouldSkipElement(node)) {
+            if (node.childElementCount > 0 && !isOwnPluginUiElement(node)) {
+              translateCommentUiRoots(node);
+              translateFileTreeSidebarHeaders(node);
+            }
+          } else if (
+            !(activeEditable && (node === activeEditable || (typeof activeEditable.contains === 'function' && activeEditable.contains(node))))
+          ) {
+            processAttributes(node, { skipChecked: true });
+            pushChildNodesToWalkStack(node, resolveAncestryFlags(node), false);
+          }
+        } else if (node.nodeType === 9 || node.nodeType === 11) {
+          if (!node.host || !shouldSkipElement(node.host)) {
+            pushChildNodesToWalkStack(node, 0, false);
+          }
+        }
+      } else if (node.nodeType === 3) {
+        walkTextCtx.inMarkdownRoot = Boolean(flags & F_MARKDOWN_ROOT);
+        walkTextCtx.inConvRow = Boolean(flags & F_CONV_ROW);
+        walkTextCtx.inCommentUi = Boolean(flags & F_COMMENT_UI);
+        processTextNode(node, walkTextCtx);
+      } else if (node.nodeType === 1) {
+        if (evaluateElementInWalk(node, flags, activeEditable)) {
+          pushChildNodesToWalkStack(node, evalNextFlags, evalSkipOwnText);
+        }
+      }
+
+      processed++;
+      if ((processed & 63) === 0) {
+        const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        if (now - startTs >= 6) {
+          scheduleRafFlush();
+          return;
+        }
+      }
+    }
+
+    if (pendingNodes.size === 0 && pendingAttrElements.size === 0 && pendingPostWalkSanitize) {
       pendingPostWalkSanitize = false;
+      if (document.body) {
+        translateFileTreeSidebarHeaders(document.body);
+      }
       sanitizeBrandAndWorkspaceHeaders();
     }
   }
@@ -8928,14 +9594,22 @@
     openLanguageSettings();
   }
 
+  let cachedSettingsBtn = null;
+
+  function getCachedSettingsBtn() {
+    if (cachedSettingsBtn && cachedSettingsBtn.isConnected) return cachedSettingsBtn;
+    cachedSettingsBtn = document.querySelector('button[data-testid="settings-button"]');
+    return cachedSettingsBtn;
+  }
+
   function updateToggleBadge() {
     const hasUpdate = updateState.status === 'available';
     const nextDotDisplay = hasUpdate ? 'inline-block' : 'none';
 
-    const settingsBtn = document.querySelector('button[data-testid="settings-button"]');
-    if (settingsBtn) {
-      let settingsDot = document.getElementById(SETTINGS_BTN_DOT_ID);
-      if (hasUpdate) {
+    let settingsDot = document.getElementById(SETTINGS_BTN_DOT_ID);
+    if (hasUpdate) {
+      const settingsBtn = getCachedSettingsBtn();
+      if (settingsBtn) {
         if (!settingsDot) {
           settingsDot = document.createElement('span');
           settingsDot.id = SETTINGS_BTN_DOT_ID;
@@ -8948,9 +9622,9 @@
           settingsBtn.appendChild(settingsDot);
         }
         settingsDot.style.display = 'inline-block';
-      } else if (settingsDot && settingsDot.parentNode) {
-        settingsDot.parentNode.removeChild(settingsDot);
       }
+    } else if (settingsDot && settingsDot.parentNode) {
+      settingsDot.parentNode.removeChild(settingsDot);
     }
 
     const navBtn = document.getElementById(SETTINGS_NAV_BTN_ID);
@@ -9077,8 +9751,7 @@
     }
     document.documentElement.lang = currentLang;
     cancelScheduledFlush();
-    pendingNodes.clear();
-    pendingPostWalkSanitize = false;
+    clearPendingQueues();
     if (currentLang === 'zh-CN') {
       customDict = getCustomDict();
       refreshLanguageSettingsPanelIfOpen();
@@ -9174,8 +9847,7 @@
     formatPangu: (text) => formatPangu(text),
     apply: () => {
       cancelScheduledFlush();
-      pendingNodes.clear();
-      pendingPostWalkSanitize = false;
+      clearPendingQueues();
       customDict = getCustomDict();
       translateCache.clear();
       restoreAllToEnglish();
@@ -9209,7 +9881,7 @@
     },
     getStats: () => ({
       language: currentLang,
-      builtInEntries: Object.keys(EXACT_MAP).length,
+      builtInEntries: BUILT_IN_ENTRY_COUNT,
       regexRules: REGEX_RULES.length,
       customEntries: Object.keys(customDict).length,
       translatedTextNodes: state.translatedNodes.size
@@ -9238,7 +9910,7 @@
           state.translatedAttrElements.delete(el);
         }
       });
-    }, 2000);
+    }, 5000);
   }
 
   function scheduleEnsureSidebarButton() {
@@ -9261,9 +9933,13 @@
           mountToggleBadge();
           return;
         }
+        updateToggleBadge();
+        return;
       }
-      updateToggleBadge();
-    }, 60);
+      if (updateState.status === 'available' || document.getElementById(SETTINGS_BTN_DOT_ID)) {
+        updateToggleBadge();
+      }
+    }, 250);
   }
 
   function syncObserverMode() {
@@ -9320,32 +9996,55 @@
           }
           for (let j = 0; j < m.addedNodes.length; j++) {
             const added = m.addedNodes[j];
-            if (
-              added &&
-              added.nodeType === 1 &&
-              added.hasAttribute('data-index') &&
-              added.firstElementChild &&
-              added.firstElementChild.classList &&
-              added.firstElementChild.classList.contains('code-line')
-            ) {
-              const gutterBtn = added.querySelector('[data-testid="gutter-comment-button"]');
-              if (gutterBtn) {
-                processAttributes(gutterBtn, { skipChecked: true });
+            if (!added) continue;
+            const nt = added.nodeType;
+            if (nt === 3) {
+              const v = added.nodeValue;
+              if (!state.nodeMap.has(added) && (!v || (!/[A-Za-z\uFFFD]/.test(v) && !customDict[v.trim()]))) {
+                continue;
               }
+              scheduleWalk(added);
               continue;
+            }
+            if (nt !== 1 && nt !== 11) continue;
+            if (nt === 1) {
+              if (
+                SKIP_TAGS.has(added.tagName) ||
+                isOwnPluginUiElement(added) ||
+                added.id === 'ag-pulse-status-bar' ||
+                added.hasAttribute('data-ag-pulse-bar')
+              ) {
+                continue;
+              }
+              if (
+                added.hasAttribute('data-index') &&
+                added.firstElementChild &&
+                added.firstElementChild.classList &&
+                added.firstElementChild.classList.contains('code-line')
+              ) {
+                const gutterBtn = added.querySelector('[data-testid="gutter-comment-button"]');
+                if (gutterBtn) {
+                  pendingAttrElements.add(gutterBtn);
+                  scheduleRafFlush();
+                }
+                continue;
+              }
             }
             scheduleWalk(added);
           }
         } else if (m.type === 'characterData') {
           if (target) {
             const rec = state.nodeMap.get(target);
-            if (rec && target.nodeValue === rec.translated) {
+            const v = target.nodeValue;
+            if (rec) {
+              if (v === rec.translated) continue;
+            } else if (!v || (!/[A-Za-z\uFFFD]/.test(v) && !customDict[v.trim()])) {
               continue;
             }
           }
           scheduleWalk(target);
         } else if (m.type === 'attributes') {
-          if (target) {
+          if (target && target.nodeType === 1 && !SKIP_TAGS.has(target.tagName) && !isOwnPluginUiElement(target)) {
             const attrRec = state.attrMap.get(target);
             const attrName = m.attributeName;
             if (
@@ -9356,8 +10055,9 @@
             ) {
               continue;
             }
+            pendingAttrElements.add(target);
+            scheduleRafFlush();
           }
-          processAttributes(target);
         }
       }
       if (hasRemovals) {
