@@ -1510,6 +1510,9 @@
     "View archived in the sidebar (": "在侧边栏中查看已归档（",
     " menu).": " 菜单）。",
     "menu).": "菜单）。",
+    "View archived in the sidebar (Customize Sidebar).": "在侧边栏中查看已归档内容（自定义侧边栏）。",
+    "Customize Sidebar).": "自定义侧边栏）。",
+    "Customize Sidebar)": "自定义侧边栏）",
     "Failed to rename conversation": "重命名对话失败",
     "Failed to delete conversation": "删除对话失败",
     "Failed to stop conversation": "停止对话失败",
@@ -8013,8 +8016,13 @@
 
     if (currentLang === 'zh-CN') {
       const inMarkdownRoot = ctx
-        ? Boolean(ctx.inMarkdownRoot && !ctx.inCommentUi)
-        : Boolean(parent.closest && parent.closest('[data-markdown-root]') && !isCommentUiElement(parent));
+        ? Boolean(ctx.inMarkdownRoot && !ctx.inCommentUi && !ctx.inToast)
+        : Boolean(
+            parent.closest &&
+            parent.closest('[data-markdown-root]') &&
+            !isCommentUiElement(parent) &&
+            !isToastOrNotificationElement(parent)
+          );
       if (!ctx && !inMarkdownRoot && tryTranslateCompoundTextNodes(parent)) {
         return;
       }
@@ -8299,10 +8307,10 @@
       return;
     }
 
-    const syncTextCtx = { skipChecked: true, inMarkdownRoot: false, inConvRow: false, inCommentUi: false };
+    const syncTextCtx = { skipChecked: true, inMarkdownRoot: false, inConvRow: false, inCommentUi: false, inToast: false };
 
     const visitChildren = (parent, flags, skipOwnText) => {
-      if (!skipOwnText && currentLang === 'zh-CN' && parent.nodeType === 1 && !((flags & F_MARKDOWN_ROOT) && !(flags & F_COMMENT_UI))) {
+      if (!skipOwnText && currentLang === 'zh-CN' && parent.nodeType === 1 && !((flags & F_MARKDOWN_ROOT) && !(flags & (F_COMMENT_UI | F_TOAST)))) {
         if (parent.childElementCount === 0 && parent.childNodes.length > 1 && tryTranslateCompoundTextNodes(parent)) {
           return;
         }
@@ -8310,12 +8318,14 @@
       const inMd = Boolean(flags & F_MARKDOWN_ROOT);
       const inConv = Boolean(flags & F_CONV_ROW);
       const inComment = Boolean(flags & F_COMMENT_UI);
+      const inToast = Boolean(flags & F_TOAST);
       for (let child = parent.firstChild; child; child = child.nextSibling) {
         if (child.nodeType === 3) {
           if (!skipOwnText) {
             syncTextCtx.inMarkdownRoot = inMd;
             syncTextCtx.inConvRow = inConv;
             syncTextCtx.inCommentUi = inComment;
+            syncTextCtx.inToast = inToast;
             processTextNode(child, syncTextCtx);
           }
         } else if (child.nodeType === 1) {
@@ -8533,7 +8543,7 @@
   let pendingAttrElements = new Set();
   const walkStackNodes = [];
   const walkStackFlags = [];
-  const walkTextCtx = { skipChecked: true, inMarkdownRoot: false, inConvRow: false, inCommentUi: false };
+  const walkTextCtx = { skipChecked: true, inMarkdownRoot: false, inConvRow: false, inCommentUi: false, inToast: false };
   let rafScheduled = false;
   let rafId = null;
   let flushTimerId = null;
@@ -8590,7 +8600,7 @@
       parent.nodeType === 1 &&
       parent.childElementCount === 0 &&
       parent.childNodes.length > 1 &&
-      !((childFlags & F_MARKDOWN_ROOT) && !(childFlags & F_COMMENT_UI)) &&
+      !((childFlags & F_MARKDOWN_ROOT) && !(childFlags & (F_COMMENT_UI | F_TOAST))) &&
       tryTranslateCompoundTextNodes(parent)
     ) {
       return;
@@ -8677,6 +8687,7 @@
         walkTextCtx.inMarkdownRoot = Boolean(flags & F_MARKDOWN_ROOT);
         walkTextCtx.inConvRow = Boolean(flags & F_CONV_ROW);
         walkTextCtx.inCommentUi = Boolean(flags & F_COMMENT_UI);
+        walkTextCtx.inToast = Boolean(flags & F_TOAST);
         processTextNode(node, walkTextCtx);
       } else if (node.nodeType === 1) {
         if (evaluateElementInWalk(node, flags, activeEditable)) {
