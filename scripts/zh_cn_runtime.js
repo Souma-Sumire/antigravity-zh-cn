@@ -8961,7 +8961,7 @@
     }
   }
 
-  const SETTINGS_UI_VERSION = '10';
+  const SETTINGS_UI_VERSION = '11';
   const SETTINGS_NAV_ITEM_ID = 'agy-zh-cn-settings-nav-item';
   const SETTINGS_NAV_BTN_ID = 'agy-zh-cn-settings-nav-btn';
   const SETTINGS_PANEL_ID = 'agy-zh-cn-settings-panel';
@@ -9186,6 +9186,18 @@
         color: var(--muted-foreground, #71717a);
         word-break: break-word;
       }
+      [data-testid="settings-sidebar"][data-agy-zh-nav-active="true"] button[data-testid^="settings-nav-item-"]:not(#agy-zh-cn-settings-nav-btn) {
+        background-color: transparent !important;
+      }
+      [data-testid="settings-sidebar"][data-agy-zh-nav-active="true"] button[data-testid^="settings-nav-item-"]:not(#agy-zh-cn-settings-nav-btn):hover {
+        background-color: var(--sidebar-muted, rgba(128, 128, 128, 0.12)) !important;
+      }
+      [data-testid="settings-sidebar"][data-agy-zh-nav-active="true"] button[data-testid^="settings-nav-item-"]:not(#agy-zh-cn-settings-nav-btn) span {
+        color: var(--secondary-foreground, inherit) !important;
+      }
+      [data-agy-zh-settings-active="true"] > :not([data-agy-zh-settings-panel="true"]) {
+        display: none !important;
+      }
     `;
   }
 
@@ -9280,31 +9292,15 @@
     return { sidebar, browserWrap, navGroup, rightContentHost };
   }
 
-  function restoreNativeSettingsPaneState(dom) {
+  function syncNativeSettingsActiveAttrs(dom, active) {
     if (!dom) return;
-    if (dom.rightContentHost) {
-      const children = dom.rightContentHost.children;
-      for (let i = 0; i < children.length; i++) {
-        const child = children[i];
-        if (child.id === SETTINGS_PANEL_ID) continue;
-        if (child.getAttribute('data-agy-hidden-pane') === '1') {
-          child.style.display = child.getAttribute('data-agy-orig-display') || '';
-          child.removeAttribute('data-agy-hidden-pane');
-          child.removeAttribute('data-agy-orig-display');
-        }
-      }
+    if (dom.sidebar) {
+      if (active) dom.sidebar.setAttribute('data-agy-zh-nav-active', 'true');
+      else dom.sidebar.removeAttribute('data-agy-zh-nav-active');
     }
-    const prevActiveBtns = dom.sidebar.querySelectorAll('button[data-agy-prev-active="1"]');
-    for (let i = 0; i < prevActiveBtns.length; i++) {
-      const b = prevActiveBtns[i];
-      b.removeAttribute('data-agy-prev-active');
-      b.classList.remove('hover:bg-sidebar-muted');
-      b.classList.add('bg-sidebar-secondary');
-      const sp = b.querySelector('[data-agy-prev-active-span="1"]');
-      if (sp) {
-        sp.removeAttribute('data-agy-prev-active-span');
-        sp.className = NAV_SPAN_ACTIVE_CLASS;
-      }
+    if (dom.rightContentHost) {
+      if (active) dom.rightContentHost.setAttribute('data-agy-zh-settings-active', 'true');
+      else dom.rightContentHost.removeAttribute('data-agy-zh-settings-active');
     }
   }
 
@@ -9325,10 +9321,7 @@
     if (panel) {
       panel.style.display = 'none';
     }
-    const dom = resolveSettingsDom();
-    if (dom) {
-      restoreNativeSettingsPaneState(dom);
-    }
+    syncNativeSettingsActiveAttrs(resolveSettingsDom(), false);
     setNavItemActiveVisual(false);
   }
 
@@ -9344,9 +9337,13 @@
       panel.setAttribute('translate', 'no');
       panel.setAttribute('data-plugin-id', 'zh-cn-ui');
       panel.setAttribute('data-external-plugin', 'true');
+      panel.setAttribute('data-agy-zh-settings-panel', 'true');
       dom.rightContentHost.appendChild(panel);
-    } else if (panel.parentElement !== dom.rightContentHost) {
-      dom.rightContentHost.appendChild(panel);
+    } else {
+      panel.setAttribute('data-agy-zh-settings-panel', 'true');
+      if (panel.parentElement !== dom.rightContentHost) {
+        dom.rightContentHost.appendChild(panel);
+      }
     }
 
     const isZh = currentLang === 'zh-CN';
@@ -9635,36 +9632,8 @@
     const dom = resolveSettingsDom();
     if (!dom || !dom.rightContentHost) return;
 
-    if (!isLanguageTabActive) {
-      const navBtns = dom.sidebar.querySelectorAll('button[data-testid^="settings-nav-item-"]');
-      for (let i = 0; i < navBtns.length; i++) {
-        const b = navBtns[i];
-        if (b.id === SETTINGS_NAV_BTN_ID) continue;
-        if (b.classList.contains('bg-sidebar-secondary')) {
-          b.setAttribute('data-agy-prev-active', '1');
-          b.classList.remove('bg-sidebar-secondary');
-          b.classList.add('hover:bg-sidebar-muted');
-          const sp = b.querySelector('span');
-          if (sp && sp.classList.contains('text-foreground')) {
-            sp.setAttribute('data-agy-prev-active-span', '1');
-            sp.className = NAV_SPAN_INACTIVE_CLASS;
-          }
-        }
-      }
-
-      const children = dom.rightContentHost.children;
-      for (let i = 0; i < children.length; i++) {
-        const child = children[i];
-        if (child.id === SETTINGS_PANEL_ID) continue;
-        if (child.style.display !== 'none') {
-          child.setAttribute('data-agy-orig-display', child.style.display || '');
-          child.setAttribute('data-agy-hidden-pane', '1');
-          child.style.display = 'none';
-        }
-      }
-      isLanguageTabActive = true;
-    }
-
+    isLanguageTabActive = true;
+    syncNativeSettingsActiveAttrs(dom, true);
     setNavItemActiveVisual(true);
     renderLanguageSettingsPanel();
   }
@@ -9825,6 +9794,7 @@
     }
 
     if (isLanguageTabActive) {
+      syncNativeSettingsActiveAttrs(dom, true);
       renderLanguageSettingsPanel();
     }
     updateToggleBadge();
