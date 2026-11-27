@@ -496,6 +496,8 @@
     "Apps connected to your account": "已关联至您账号的应用",
     "Are you sure you want to delete this side question? This action cannot be undone.": "确定要删除此旁路提问吗？此操作无法撤销。",
     "Ask /btw": "提问 /btw",
+    "Applies to /btw and messages sent after this turn": "适用于 /btw 及本轮之后发送的消息",
+    "Applies to messages sent after this turn": "适用于本轮之后发送的消息",
     "Ask a side question without interrupting the main conversation": "在不打断主对话的情况下发起旁路提问",
     "Attach terminal output": "附加终端输出",
     "Attackers might be trying to steal your information from": "攻击者可能正试图窃取您在该网站上的信息：",
