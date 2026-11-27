@@ -6724,14 +6724,16 @@
     ],
     [
       /^(.+?)\s*\((low|medium|high|extra|xhigh|max)(?:\s+thinking)?\)$/i,
-      (_m, model, level) => {
+      (m, model, level) => {
+        if (!isThinkingEffortTranslationEnabled()) return m;
         const map = { low: '低', medium: '中', high: '高', extra: '极高', xhigh: '极高', max: '最高' };
         return `${model} (${map[level.toLowerCase()] || level})`;
       }
     ],
     [
       /^(Gemini\s+.+?)\s+(Low|Medium|High|Extra\s+High|Max)$/i,
-      (_m, model, level) => {
+      (m, model, level) => {
+        if (!isThinkingEffortTranslationEnabled()) return m;
         const map = { low: '低', medium: '中', high: '高', 'extra high': '极高', max: '最高' };
         return `${model} (${map[level.toLowerCase()] || level})`;
       }
@@ -7274,6 +7276,32 @@
     return REGEX_INDEX.buckets[bucketKey] || REGEX_INDEX.wildcardIndices;
   }
 
+  const THINKING_EFFORT_EXACT_KEYS = new Set([
+    'High',
+    'Medium',
+    'Low',
+    'Extra',
+    'extra',
+    'Max',
+    'max',
+    'Extra High',
+    'extra high',
+    'Gemini 3.8 Flash High',
+    'Gemini 3.7 Flash Medium',
+    'Gemini 3.6 Flash Low',
+    'Gemini 3.1 Pro Low',
+    'GPT-OSS 120B (Medium)'
+  ]);
+
+  function lookupExactMap(key) {
+    const val = EXACT_MAP[key];
+    if (!val) return null;
+    if (THINKING_EFFORT_EXACT_KEYS.has(key) && !isThinkingEffortTranslationEnabled()) {
+      return null;
+    }
+    return val;
+  }
+
   function doTranslateText(str) {
     if (!str || typeof str !== 'string') return null;
     const trimmed = str.trim();
@@ -7284,12 +7312,14 @@
     if (customDict[trimmed]) {
       return str.replace(trimmed, () => customDict[trimmed]);
     }
-    if (EXACT_MAP[trimmed]) {
-      return str.replace(trimmed, () => EXACT_MAP[trimmed]);
+    const exactTrimmed = lookupExactMap(trimmed);
+    if (exactTrimmed) {
+      return str.replace(trimmed, () => exactTrimmed);
     }
     const normalizedKey = trimmed.replace(/\s+/g, ' ').replace(/[’‘]/g, "'");
-    if (EXACT_MAP[normalizedKey]) {
-      return str.replace(trimmed, () => EXACT_MAP[normalizedKey]);
+    const exactNormalized = lookupExactMap(normalizedKey);
+    if (exactNormalized) {
+      return str.replace(trimmed, () => exactNormalized);
     }
 
     const titleCache = (currentLang === 'zh-CN' && isTitleTranslationEnabled()) ? window.__AGY_TITLE_CACHE__ : null;
@@ -7506,6 +7536,10 @@
       const [re, replacement] = REGEX_RULES[bucket[i]];
       if (re.test(normalizedKey)) {
         const res = normalizedKey.replace(re, replacement);
+        if (res === normalizedKey) {
+          setTranslateCache(trimmed, null);
+          return null;
+        }
         setTranslateCache(trimmed, res);
         return str.replace(trimmed, () => res);
       }
@@ -8140,7 +8174,7 @@
           /^[a-zA-Z]+$/.test(trimmedMd) &&
           !(parent.closest && parent.closest('button, [role="button"], th, td, label, summary, [role="tab"], [role="menuitem"], [data-testid*="badge"], .rounded-full'));
         if (!isSplitFragment && !isBareWordOutsideControl) {
-          const exactMd = EXACT_MAP[trimmedMd] || EXACT_MAP[trimmedMd.replace(/\s+/g, ' ')];
+          const exactMd = lookupExactMap(trimmedMd) || lookupExactMap(trimmedMd.replace(/\s+/g, ' '));
           if (exactMd) {
             const leadingMd = record.orig.match(/^\s*/)[0];
             const trailingMd = record.orig.match(/\s*$/)[0];
@@ -8826,8 +8860,34 @@
     scheduleRafFlush();
   }
 
-    const TITLE_TRANS_STORAGE_KEY = '__agy_enable_remote_title_trans__';
+  const TITLE_TRANS_STORAGE_KEY = '__agy_enable_remote_title_trans__';
   const TITLE_CACHE_STORAGE_KEY = '__agy_title_cache_store__';
+  const THINKING_EFFORT_TRANS_STORAGE_KEY = '__agy_translate_thinking_effort__';
+
+  function isThinkingEffortTranslationEnabled() {
+    try {
+      return window.localStorage.getItem(THINKING_EFFORT_TRANS_STORAGE_KEY) !== '0';
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function setThinkingEffortTranslationEnabled(enabled) {
+    const val = enabled ? '1' : '0';
+    try {
+      window.localStorage.setItem(THINKING_EFFORT_TRANS_STORAGE_KEY, val);
+    } catch (_) {}
+
+    translateCache.clear();
+    if (currentLang === 'zh-CN') {
+      restoreAllToEnglish();
+      state.nodeMap = new WeakMap();
+      state.translatedNodes.clear();
+      if (document.body) {
+        walkAndTranslate(document.body);
+      }
+    }
+  }
 
   try {
     const localStore = window.localStorage.getItem(TITLE_CACHE_STORAGE_KEY);
@@ -9350,6 +9410,7 @@
 
     const isZh = currentLang === 'zh-CN';
     const isTitleTrans = isTitleTranslationEnabled();
+    const isThinkingEffortTrans = isThinkingEffortTranslationEnabled();
     const isBusy = updateState.status === 'checking' || updateState.status === 'updating';
 
     const copy = isZh
@@ -9361,6 +9422,8 @@
           langDesc: '在简体中文与 English 之间即时切换，无需重启应用。',
           titleTransLabel: '联网翻译会话标题',
           titleTransDesc: '开启后自动翻译侧边栏英文会话标题，并在本地缓存翻译结果。',
+          thinkingEffortLabel: '翻译模型思考强度',
+          thinkingEffortDesc: '开启后将模型名称及选项中的思考强度（如 Low / Medium / High / Extra High）译为低、中、高、极高。',
           sectionUpdate: '语言包更新',
           packLabel: '简体中文语言包',
           packDescIdle: updateState.currentHash
@@ -9390,6 +9453,8 @@
           langDesc: 'Switch between Simplified Chinese and English immediately without restarting.',
           titleTransLabel: 'Translate Conversation Titles',
           titleTransDesc: 'Automatically translate English conversation titles in the sidebar and cache them locally.',
+          thinkingEffortLabel: 'Translate Thinking Effort',
+          thinkingEffortDesc: 'Translate model thinking effort levels (e.g. Low, Medium, High, Extra High) into Chinese.',
           sectionUpdate: 'Language Pack Updates',
           packLabel: 'Simplified Chinese Language Pack',
           packDescIdle: updateState.currentHash
@@ -9536,25 +9601,44 @@
     seg.appendChild(enBtn);
     const langRow = createRow(copy.langLabel, copy.langDesc, seg);
 
-    // 行 2：联网翻译会话标题开关
-    const titleSw = document.createElement('button');
-    titleSw.type = 'button';
-    titleSw.setAttribute('role', 'switch');
-    titleSw.setAttribute('aria-checked', isTitleTrans ? 'true' : 'false');
-    titleSw.className = `agy-zh-switch${isTitleTrans ? ' on' : ''}`;
-    const knob = document.createElement('span');
-    knob.className = 'agy-zh-switch-knob';
-    titleSw.appendChild(knob);
-    titleSw.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const next = !isTitleTranslationEnabled();
-      setTitleTranslationEnabled(next);
-      titleSw.className = `agy-zh-switch${next ? ' on' : ''}`;
-      titleSw.setAttribute('aria-checked', next ? 'true' : 'false');
-    });
-    const titleTransRow = createRow(copy.titleTransLabel, copy.titleTransDesc, titleSw);
+    const createSwitchRow = (labelText, descText, initialChecked, getChecked, setChecked) => {
+      const sw = document.createElement('button');
+      sw.type = 'button';
+      sw.setAttribute('role', 'switch');
+      sw.setAttribute('aria-checked', initialChecked ? 'true' : 'false');
+      sw.className = `agy-zh-switch${initialChecked ? ' on' : ''}`;
+      const knob = document.createElement('span');
+      knob.className = 'agy-zh-switch-knob';
+      sw.appendChild(knob);
+      sw.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = !getChecked();
+        setChecked(next);
+        sw.className = `agy-zh-switch${next ? ' on' : ''}`;
+        sw.setAttribute('aria-checked', next ? 'true' : 'false');
+      });
+      return createRow(labelText, descText, sw);
+    };
 
-    sectionsWrap.appendChild(createSection(copy.sectionGeneral, [langRow, titleTransRow]));
+    // 行 2：联网翻译会话标题开关
+    const titleTransRow = createSwitchRow(
+      copy.titleTransLabel,
+      copy.titleTransDesc,
+      isTitleTrans,
+      isTitleTranslationEnabled,
+      setTitleTranslationEnabled
+    );
+
+    // 行 3：翻译模型思考强度开关
+    const thinkingEffortRow = createSwitchRow(
+      copy.thinkingEffortLabel,
+      copy.thinkingEffortDesc,
+      isThinkingEffortTrans,
+      isThinkingEffortTranslationEnabled,
+      setThinkingEffortTranslationEnabled
+    );
+
+    sectionsWrap.appendChild(createSection(copy.sectionGeneral, [langRow, titleTransRow, thinkingEffortRow]));
 
     // 分组 2：语言包更新
     let statusEl = null;
@@ -9917,6 +10001,8 @@
     },
     getLanguage: () => currentLang,
     setLanguage,
+    isThinkingEffortTranslationEnabled,
+    setThinkingEffortTranslationEnabled,
     toggle: () => setLanguage(currentLang === 'zh-CN' ? 'en-US' : 'zh-CN'),
     translate: (text) => translateText(text),
     formatPangu: (text) => formatPangu(text),
